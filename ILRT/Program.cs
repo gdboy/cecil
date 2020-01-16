@@ -3,9 +3,8 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using MethodBody = Mono.Cecil.Cil.MethodBody;
 
 //指令大全 https://docs.microsoft.com/zh-cn/dotnet/api/system.reflection.emit.opcodes?view=netframework-4.8
 
@@ -19,6 +18,16 @@ namespace ILRT {
 		static Stack<object []> localArgsStack = new Stack<object []> ();//函数参数栈
 
 		static Dictionary<TypeReference, Dictionary<string, object>> staticFields = new Dictionary<TypeReference, Dictionary<string, object>> ();//静态字段
+
+		static string GetTypeName (TypeReference typeReference)
+		{
+			var typeName = typeReference.Name;
+
+			if (typeName == "!!0[]")
+				return "T[]";
+
+			return typeName;
+		}
 
 		static Type GetType (TypeReference typeReference)
 		{
@@ -42,6 +51,72 @@ namespace ILRT {
 			return null;
 		}
 
+		static MethodInfo GetMethod (MethodReference methodReference)
+		{
+			if(!methodReference.ContainsGenericParameter) {
+
+				var parameters = methodReference.Parameters;
+
+				var types = new Type [parameters.Count];
+
+				for (var i = 0; i < parameters.Count; i++) {
+
+					var type = GetType (parameters [i].ParameterType);
+
+					types [i] = type;
+				}
+
+				var classType = GetType (methodReference.DeclaringType);
+
+				//if (methodReference.Name == ".ctor")
+				
+				return classType.GetMethod (methodReference.Name, types);
+			}
+
+			var methods = GetType (methodReference.DeclaringType).GetMethods (BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+			foreach (var method in methods) {
+				if (method.Name != methodReference.Name || method.IsGenericMethod != methodReference.IsGenericInstance)
+					continue;
+
+				var parameters = method.GetParameters ();
+				if (parameters.Length != methodReference.Parameters.Count)
+					continue;
+
+				var types = new List<Type> ();
+
+				var find = true;
+
+				for(var i = 0; i < parameters.Length; i++) {
+					if (parameters [i].ParameterType.Name != GetTypeName (methodReference.Parameters [i].ParameterType)) {
+						find = false;
+						break;
+					}
+
+					//if (parameters [i].ParameterType.IsGenericType)
+					//types.Add (parameters [i].ParameterType);
+					types.Add (typeof(int));
+				}
+
+				if (!find)
+					continue;
+
+				if (!method.ContainsGenericParameters)
+					return method;
+
+				/*
+				*如果没有此句代码则会抛出：“不能对 ContainsGenericParameters 为 True 的类型或方法执行后期绑定操作。”的异常。
+				*原因：因为调用泛型方法，方法自身的类型参数或任何封闭类型中必须不含泛型类型定义或开放构造类型。进行这种递归确认是很困难的。
+				*      为方便起见，也为了减少错误，ContainsGenericParameters 属性提供一种标准方法来区分封闭构造方法（可以调用）和开放构造方法（不能调用）。
+				*      如果 ContainsGenericParameters 属性返回 true，则方法不能调用。
+				*作用：用类型数组的元素代替当前泛型方法定义的类型参数，并返回表示结果构造方法的 MethodInfo 对象。
+				*/
+				return method.MakeGenericMethod (types.ToArray());
+			}
+
+			return null;
+		}
+
 		static int Compare (object a, object b)
 		{
 			if (a is double || b is double || a is float || b is float) {
@@ -54,11 +129,15 @@ namespace ILRT {
 
 		static void Main (string [] args)
 		{
-#if DEBUG
+			foreach (var item in new int [] { 1, 3, 2, 5, 4 }.ToList ())
+				Console.WriteLine (item);
+
+
+//#if DEBUG
 			var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Debug/ExampleDll.dll");
-#else
-			var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Release/ExampleDll.dll");
-#endif
+//#else
+			//var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Release/ExampleDll.dll");
+//#endif
 			foreach (var type in module.Types) {
 
 				foreach (var methodDefinition in type.Methods) {
@@ -75,8 +154,6 @@ namespace ILRT {
 					}
 				}
 			}
-
-
 		}
 
 		static void Execute (MethodReference methodReference)
@@ -139,9 +216,9 @@ namespace ILRT {
 			MethodBase method = null;
 
 			if (methodReference.Name == ".ctor")
-				method = classType.GetConstructor (types);//, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+				method = classType.GetConstructor (types);
 			else
-				method = classType.GetMethod (methodReference.Name, types);//, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+				method = GetMethod (methodReference);
 
 			var resultValue = method.Invoke (obj, objects);
 
@@ -487,8 +564,6 @@ namespace ILRT {
 				break;
 
 			case Code.Box:
-				Console.WriteLine (instruction);
-				break;
 			case Code.Unbox:
 			case Code.Unbox_Any:
 				Console.WriteLine (instruction);
@@ -615,68 +690,6 @@ namespace ILRT {
 					if (instruction.Operand is MethodDefinition) {
 
 						Execute (instruction.Operand as MethodDefinition);
-						break;
-					}
-
-					if (instruction.Operand is GenericInstanceMethod) {
-						var methodReference = instruction.Operand as GenericInstanceMethod;
-
-						var parameters = methodReference.Parameters;
-
-						var types = new Type [parameters.Count];
-						var objects = new object [parameters.Count];
-
-						for (var i = 0; i < parameters.Count; i++) {
-
-							var type = GetType (parameters [i].ParameterType);
-
-							if (type == null)
-								type = typeof (object);
-
-							types [i] = type;
-
-							var value = stack.Pop ();
-
-							switch (type.ToString ()) {
-							case "System.Boolean":
-								value = Convert.ToBoolean (value);
-								break;
-							case "System.Int32":
-								value = Convert.ToInt32 (value);
-								break;
-							case "System.Int64":
-								value = Convert.ToInt64 (value);
-								break;
-							case "System.Single":
-								value = Convert.ToSingle (value);
-								break;
-							case "System.Double":
-								value = Convert.ToDouble (value);
-								break;
-							}
-
-							objects [parameters.Count - 1 - i] = value;
-						}
-
-						var classType = GetType (methodReference.DeclaringType);
-
-						var methodInfo = classType.GetMethod (methodReference.Name, types);//, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
-
-						//if (methodInfo == null) {
-						//	var methods = classType.GetMethods ();
-						//	Console.WriteLine (methods);
-						//}
-						methodInfo = classType.GetMethod (methodReference.Name);
-
-						object obj = null;
-
-						if (methodReference.HasThis)
-							obj = stack.Pop ();
-
-						var resultValue = methodInfo.Invoke (obj, objects);
-
-						if (methodInfo.ReturnType.FullName != "System.Void")
-							stack.Push (resultValue);
 						break;
 					}
 
