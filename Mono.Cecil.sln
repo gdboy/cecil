@@ -11,6 +11,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mono.Cecil.Mdb", "symbols\m
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ILRT", "ILRT\ILRT.csproj", "{9E15669D-5808-4D82-84E4-F846525CAC7B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExampleDLL", "ExampleDLL\ExampleDLL.csproj", "{D701D519-DFCD-42F7-BAAA-E76481A60443}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{9E15669D-5808-4D82-84E4-F846525CAC7B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9E15669D-5808-4D82-84E4-F846525CAC7B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9E15669D-5808-4D82-84E4-F846525CAC7B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D701D519-DFCD-42F7-BAAA-E76481A60443}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D701D519-DFCD-42F7-BAAA-E76481A60443}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D701D519-DFCD-42F7-BAAA-E76481A60443}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D701D519-DFCD-42F7-BAAA-E76481A60443}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

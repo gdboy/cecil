@@ -7,6 +7,9 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using MethodBody = Mono.Cecil.Cil.MethodBody;
 
+//指令大全 https://docs.microsoft.com/zh-cn/dotnet/api/system.reflection.emit.opcodes?view=netframework-4.8
+
+
 namespace ILRT {
 	class Program {
 		static Stack<object> stack = new Stack<object> ();
@@ -51,28 +54,26 @@ namespace ILRT {
 
 		static void Main (string [] args)
 		{
-			var module = ModuleDefinition.ReadModule (@"F:\workspace\GameCenter\HotFix_DLL\HotFix_Project.dll");
+#if DEBUG
+			var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Debug/ExampleDll.dll");
+#else
+			var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Release/ExampleDll.dll");
+#endif
 			foreach (var type in module.Types) {
-				//if (!type.IsPublic)
-				//	continue;
-
-				//Console.WriteLine (type.FullName + " " + type.Methods.Count);
-
-				if (type.FullName != "GameCenter.Program")
-					continue;
 
 				foreach (var methodDefinition in type.Methods) {
 
-					if (methodDefinition.Name == "Main") {
+					if (methodDefinition.IsStatic && methodDefinition.Name == "Main") {
 						Console.WriteLine (methodDefinition);
+
+						foreach (var p in methodDefinition.Parameters)
+							stack.Push (null);
 
 						Execute (methodDefinition);
 
 						break;
 					}
 				}
-
-				break;
 			}
 
 
@@ -252,7 +253,7 @@ namespace ILRT {
 			case Code.Readonly:
 				break;
 
-			#region 栈操作
+#region 栈操作
 			case Code.Dup:
 				stack.Push (stack.Peek ());
 				break;
@@ -260,7 +261,7 @@ namespace ILRT {
 			case Code.Pop:
 				stack.Pop ();
 				break;
-			#endregion
+#endregion
 
 			case Code.Ldc_I4_M1:
 			case Code.Ldc_I4_0:
@@ -284,7 +285,7 @@ namespace ILRT {
 				stack.Push (instruction.Operand);
 				break;
 
-			#region 局部变量
+#region 局部变量
 			case Code.Stloc_0:
 			case Code.Stloc_1:
 			case Code.Stloc_2:
@@ -313,9 +314,9 @@ namespace ILRT {
 			case Code.Ldloca:
 				stack.Push (localVars [((VariableReference)instruction.Operand).Index]);
 				break;
-			#endregion
+#endregion
 
-			#region 函数参数
+#region 函数参数
 			case Code.Ldarg_0:
 			case Code.Ldarg_1:
 			case Code.Ldarg_2:
@@ -331,9 +332,9 @@ namespace ILRT {
 			case Code.Ldarga:
 				stack.Push (localArgs [((VariableReference)instruction.Operand).Index]);
 				break;
-			#endregion
+#endregion
 
-			#region 加减乘除求余
+#region 加减乘除求余
 			case Code.Add: {
 					var b = stack.Pop ();
 					var a = stack.Pop ();
@@ -438,7 +439,7 @@ namespace ILRT {
 						stack.Push (Convert.ToUInt32 (a) % Convert.ToUInt32 (b));
 				}
 				break;
-			#endregion
+#endregion
 
 			//case Code.And:
 			//case Code.Or:
@@ -449,7 +450,7 @@ namespace ILRT {
 			//case Code.Neg:
 			//case Code.Not:
 
-			#region 比较结果
+#region 比较结果
 			//比较两个值。如果这两个值相等，则将整数值 1 (int32) 推送到计算堆栈上；否则，将 0 (int32) 推送到计算堆栈上。
 			case Code.Ceq: {
 					var b = stack.Pop ();
@@ -478,7 +479,7 @@ namespace ILRT {
 					stack.Push (Convert.ToDouble (a) < Convert.ToDouble (b) ? 1 : 0);
 				}
 				break;
-			#endregion
+#endregion
 
 			//推送对元数据中存储的字符串的新对象引用。
 			case Code.Ldstr:
@@ -493,7 +494,7 @@ namespace ILRT {
 				Console.WriteLine (instruction);
 				break;
 
-			#region 控制转移
+#region 控制转移
 			//无条件地将控制转移到目标指令。
 			case Code.Br_S:
 			case Code.Br:
@@ -576,7 +577,7 @@ namespace ILRT {
 			case Code.Leave:
 				next = (Instruction)instruction.Operand;
 				break;
-			#endregion
+#endregion
 
 			//将位于计算堆栈顶部的值转换为 int32。
 			case Code.Conv_I1:
@@ -607,7 +608,7 @@ namespace ILRT {
 				stack.Push (Convert.ToDouble (stack.Pop ()));
 				break;
 
-			#region 函数和委托
+#region 函数和委托
 			case Code.Call:
 			case Code.Callvirt: {
 
@@ -695,13 +696,13 @@ namespace ILRT {
 			case Code.Ldvirtftn:
 				stack.Push (instruction.Operand);
 				break;
-			#endregion
+#endregion
 
 			case Code.Ldtoken:
 				stack.Push (((FieldDefinition)instruction.Operand).InitialValue);
 				break;
 
-			#region 类和对象
+#region 类和对象
 			//创建一个值类型的新对象或新实例，并将对象引用（O 类型）推送到计算堆栈上。
 			case Code.Newobj:
 				if (instruction.Operand is MethodDefinition) {
@@ -763,9 +764,9 @@ namespace ILRT {
 			case Code.Ldnull:
 				stack.Push (null);
 				break;
-			#endregion
+#endregion
 
-			#region 数组
+#region 数组
 			//将对新的从零开始的一维数组（其元素属于特定类型）的对象引用推送到计算堆栈上。
 			case Code.Newarr: {
 					var type = GetType (instruction.Operand as TypeReference);
@@ -815,9 +816,9 @@ namespace ILRT {
 					array.SetValue (value, index);
 				}
 				break;
-			#endregion
+#endregion
 
-			#region 异常处理
+#region 异常处理
 			case Code.Endfinally:
 			case Code.Endfilter:
 				break;
@@ -827,7 +828,7 @@ namespace ILRT {
 				Console.WriteLine ((stack.Pop () as Exception).Message);
 				next = null;
 				break;
-			#endregion
+#endregion
 
 			default:
 				throw new NotSupportedException ("Not supported " + instruction);
