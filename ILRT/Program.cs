@@ -1,4 +1,5 @@
-﻿
+﻿//#define ILCORE_DEBUG
+
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using System;
@@ -7,7 +8,6 @@ using System.Linq;
 using System.Reflection;
 
 //指令大全 https://docs.microsoft.com/zh-cn/dotnet/api/system.reflection.emit.opcodes?view=netframework-4.8
-
 
 namespace ILRT {
 	class Program {
@@ -19,22 +19,24 @@ namespace ILRT {
 
 		static Dictionary<TypeReference, Dictionary<string, object>> staticFields = new Dictionary<TypeReference, Dictionary<string, object>> ();//静态字段
 
-		static string GetTypeName (TypeReference typeReference)
-		{
-			var typeName = typeReference.Name;
+#if ILCORE_DEBUG
+		static List<KeyValuePair<Instruction, Stack<object>>> stackInfo = new List<KeyValuePair<Instruction, Stack<object>>>();//每条指令执行时的栈信息
+#endif
 
-			if (typeName == "!!0[]")
-				return "T[]";
-
-			return typeName;
-		}
-
-		static Type GetType (TypeReference typeReference)
+		//泛型需要结合MethodReference的参数得到具体类型信息
+		static Type GetType (TypeReference typeReference, MethodReference methodReference = null)
 		{
 			var typeName = typeReference.FullName;
 
-			if (typeReference is GenericInstanceType) {
-				typeName = (typeReference as TypeSpecification).ElementType.FullName;
+			if (typeReference.IsGenericInstance) {
+				typeName = typeName.Replace ("<", "[[").Replace (">", "]]");
+			}
+
+			if (typeReference.IsGenericParameter) {
+				var genericArguments = ((GenericInstanceType)methodReference.DeclaringType).GenericArguments;
+				for (var i = 0; i < genericArguments.Count; i++) {
+					typeName = typeName.Replace ("!" + i, genericArguments [i].FullName);
+				}
 			}
 
 			var type = Type.GetType (typeName);
@@ -73,7 +75,7 @@ namespace ILRT {
 				return classType.GetMethod (methodReference.Name, types);
 			}
 
-			var methods = GetType (methodReference.DeclaringType).GetMethods (BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+			var methods = GetType (methodReference.DeclaringType, methodReference).GetMethods (BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
 
 			foreach (var method in methods) {
 				if (method.Name != methodReference.Name || method.IsGenericMethod != methodReference.IsGenericInstance)
@@ -88,14 +90,14 @@ namespace ILRT {
 				var find = true;
 
 				for(var i = 0; i < parameters.Length; i++) {
-					if (parameters [i].ParameterType.Name != GetTypeName (methodReference.Parameters [i].ParameterType)) {
+					if (parameters [i].ParameterType.Name != GetType (methodReference.Parameters [i].ParameterType, methodReference).Name) {
 						find = false;
 						break;
 					}
 
 					//if (parameters [i].ParameterType.IsGenericType)
 					//types.Add (parameters [i].ParameterType);
-					types.Add (typeof(int));
+					//types.Add (typeof(int));
 				}
 
 				if (!find)
@@ -104,17 +106,23 @@ namespace ILRT {
 				if (!method.ContainsGenericParameters)
 					return method;
 
-				/*
-				*如果没有此句代码则会抛出：“不能对 ContainsGenericParameters 为 True 的类型或方法执行后期绑定操作。”的异常。
-				*原因：因为调用泛型方法，方法自身的类型参数或任何封闭类型中必须不含泛型类型定义或开放构造类型。进行这种递归确认是很困难的。
-				*      为方便起见，也为了减少错误，ContainsGenericParameters 属性提供一种标准方法来区分封闭构造方法（可以调用）和开放构造方法（不能调用）。
-				*      如果 ContainsGenericParameters 属性返回 true，则方法不能调用。
-				*作用：用类型数组的元素代替当前泛型方法定义的类型参数，并返回表示结果构造方法的 MethodInfo 对象。
-				*/
 				return method.MakeGenericMethod (types.ToArray());
 			}
 
 			return null;
+		}
+
+		static Type[] GetParameters(MethodReference methodReference)
+		{
+			var parameters = methodReference.Parameters;
+
+			var types = new Type [parameters.Count];
+
+			for (var i = 0; i < parameters.Count; i++) {
+				types [i] = GetType (parameters [i].ParameterType, methodReference);
+			}
+
+			return types;
 		}
 
 		static int Compare (object a, object b)
@@ -143,7 +151,6 @@ namespace ILRT {
 				foreach (var methodDefinition in type.Methods) {
 
 					if (methodDefinition.IsStatic && methodDefinition.Name == "Main") {
-						Console.WriteLine (methodDefinition);
 
 						foreach (var p in methodDefinition.Parameters)
 							stack.Push (null);
@@ -158,8 +165,8 @@ namespace ILRT {
 
 		static void Execute (MethodReference methodReference)
 		{
-			//if(methodReference.FullName == "System.Void System.Object::.ctor()")
-			//	return;
+			if(methodReference.FullName == "System.Void System.Object::.ctor()")
+				return;
 
 			if (methodReference.FullName == "System.Void System.Runtime.CompilerServices.RuntimeHelpers::InitializeArray(System.Array,System.RuntimeFieldHandle)") {
 				var bytes = stack.Pop () as Array;
@@ -171,66 +178,45 @@ namespace ILRT {
 
 			object obj = null;
 
-			if (methodReference.HasThis)
+			if (methodReference.HasThis && methodReference.Name != ".ctor")
 				obj = stack.Pop ();
 
 			var parameters = methodReference.Parameters;
 
-			var types = new Type [parameters.Count];
 			var objects = new object [parameters.Count];
 
 			for (var i = 0; i < parameters.Count; i++) {
 
-				var type = GetType (parameters [i].ParameterType);
-
-				if (type == null)
-					type = typeof (object);
-
-				types [i] = type;
-
-				var value = stack.Pop ();
-
-				switch (type.ToString ()) {
-				case "System.Boolean":
-					value = Convert.ToBoolean (value);
-					break;
-				case "System.Int32":
-					value = Convert.ToInt32 (value);
-					break;
-				case "System.Int64":
-					value = Convert.ToInt64 (value);
-					break;
-				case "System.Single":
-					value = Convert.ToSingle (value);
-					break;
-				case "System.Double":
-					value = Convert.ToDouble (value);
-					break;
-				}
-
-				objects [parameters.Count - 1 - i] = value;
+				objects [parameters.Count - 1 - i] = stack.Pop ();
 			}
 
-			var classType = GetType (methodReference.DeclaringType);
+			if (methodReference.Name == ".ctor") {
+				if (methodReference.IsGenericInstance) {
+					var classType = GetType (methodReference.DeclaringType.GetElementType (), methodReference);
+					var types = GetParameters (methodReference);
+					var genericType = classType.MakeGenericType (types);
+					var instance = Activator.CreateInstance (genericType, objects);
+					stack.Push (instance);
+				} else {
+					var classType = GetType (methodReference.DeclaringType, methodReference);
+					var instance = Activator.CreateInstance (classType, objects);
+					stack.Push (instance);
+				}
+				return;
+			}
 
-			MethodBase method = null;
-
-			if (methodReference.Name == ".ctor")
-				method = classType.GetConstructor (types);
-			else
-				method = GetMethod (methodReference);
+			var method = GetMethod (methodReference);
 
 			var resultValue = method.Invoke (obj, objects);
 
-			var methodInfo = method as MethodInfo;
-			if (methodInfo == null)
-				stack.Push (obj);
-			else if (methodInfo.ReturnType.FullName != "System.Void")
+			if (method.ReturnType.FullName != "System.Void")
 				stack.Push (resultValue);
 		}
 
 		static void Execute (MethodDefinition methodDefinition)
 		{
+			Console.WriteLine (methodDefinition);
+
 			if (!staticFields.ContainsKey (methodDefinition.DeclaringType)) {
 				var dictionary = new Dictionary<string, object> ();
 
@@ -266,37 +252,37 @@ namespace ILRT {
 				ExceptionHandler finallyHandler = null;
 
 				do {
-					try {
-						instruction = Execute (instruction);
+					//try {
+						instruction = Execute (instruction, methodDefinition);
 
 						if (finallyHandler != null && instruction == null) {
 							instruction = finallyHandler.HandlerStart;
 							finallyHandler = null;
 						}
-					}
-					catch (Exception e) {
+					//}
+					//catch (Exception e) {
 
-						var exceptionHandlers = methodDefinition.Body.ExceptionHandlers;
+					//	var exceptionHandlers = methodDefinition.Body.ExceptionHandlers;
 
-						if (exceptionHandlers == null || exceptionHandlers.Count == 0) {
-							Console.WriteLine (e);
-							break;
-						}
+					//	if (exceptionHandlers == null || exceptionHandlers.Count == 0) {
+					//		Console.WriteLine (e);
+					//		break;
+					//	}
 
-						foreach (var exceptionHandler in exceptionHandlers) {
+					//	foreach (var exceptionHandler in exceptionHandlers) {
 
-							if (exceptionHandler.HandlerType == ExceptionHandlerType.Catch && GetType (exceptionHandler.CatchType).IsAssignableFrom (e.GetType ())) {
-								stack.Push (e);
-								instruction = exceptionHandler.HandlerStart;
-								break;
-							}
-						}
+					//		if (exceptionHandler.HandlerType == ExceptionHandlerType.Catch && GetType (exceptionHandler.CatchType).IsAssignableFrom (e.GetType ())) {
+					//			stack.Push (e);
+					//			instruction = exceptionHandler.HandlerStart;
+					//			break;
+					//		}
+					//	}
 
-						var lastExceptionHandler = exceptionHandlers [exceptionHandlers.Count - 1];
+					//	var lastExceptionHandler = exceptionHandlers [exceptionHandlers.Count - 1];
 
-						if (lastExceptionHandler.HandlerType == ExceptionHandlerType.Finally)
-							finallyHandler = lastExceptionHandler;
-					}
+					//	if (lastExceptionHandler.HandlerType == ExceptionHandlerType.Finally)
+					//		finallyHandler = lastExceptionHandler;
+					//}
 				} while (instruction != null);
 			} else {//委托
 				switch (methodDefinition.Name) {
@@ -316,9 +302,13 @@ namespace ILRT {
 			localVars = localVarsStack.Pop ();
 		}
 
-		static Instruction Execute (Instruction instruction)
+		static Instruction Execute (Instruction instruction, MethodDefinition methodDefinition)
 		{
-			//Console.WriteLine (instruction);
+			
+#if ILCORE_DEBUG
+			Console.WriteLine (instruction);
+			stackInfo.Add (new KeyValuePair<Instruction, Stack<object>> (instruction, new Stack<object> (stack)));
+#endif
 
 			var next = instruction.Next;
 
@@ -379,8 +369,11 @@ namespace ILRT {
 			case Code.Ldloc_0:
 			case Code.Ldloc_1:
 			case Code.Ldloc_2:
-			case Code.Ldloc_3:
-				stack.Push (localVars [instruction.OpCode.Code - Code.Ldloc_0]);
+			case Code.Ldloc_3: {
+					var index = instruction.OpCode.Code - Code.Ldloc_0;
+					if (localVars.TryGetValue (index, out object value))
+						stack.Push (value);
+				}
 				break;
 
 			//将指定索引处的局部变量加载到计算堆栈上。
@@ -388,8 +381,11 @@ namespace ILRT {
 			case Code.Ldloc:
 			//将位于特定索引处的局部变量的地址加载到计算堆栈上。
 			case Code.Ldloca_S:
-			case Code.Ldloca:
-				stack.Push (localVars [((VariableReference)instruction.Operand).Index]);
+			case Code.Ldloca: {
+					var index = ((VariableReference)instruction.Operand).Index;
+					if (localVars.TryGetValue (index, out object value))
+						stack.Push (value);
+				}
 				break;
 #endregion
 
@@ -516,11 +512,30 @@ namespace ILRT {
 						stack.Push (Convert.ToUInt32 (a) % Convert.ToUInt32 (b));
 				}
 				break;
-#endregion
+			#endregion
 
-			//case Code.And:
-			//case Code.Or:
-			//case Code.Xor:
+			//计算两个值的按位“与”并将结果推送到计算堆栈上。
+			case Code.And: {
+					var b = stack.Pop ();
+					var a = stack.Pop ();
+
+					stack.Push (Convert.ToInt64 (a) & Convert.ToInt64 (b));
+				}
+				break;
+			case Code.Or: {
+					var b = stack.Pop ();
+					var a = stack.Pop ();
+
+					stack.Push (Convert.ToInt64 (a) | Convert.ToInt64 (b));
+				}
+				break;
+			case Code.Xor: {
+					var b = stack.Pop ();
+					var a = stack.Pop ();
+
+					stack.Push (Convert.ToInt64 (a) ^ Convert.ToInt64 (b));
+				}
+				break;
 			//case Code.Shl:
 			//case Code.Shr:
 			//case Code.Shr_Un:
@@ -685,20 +700,18 @@ namespace ILRT {
 
 #region 函数和委托
 			case Code.Call:
-			case Code.Callvirt: {
-
-					if (instruction.Operand is MethodDefinition) {
-
-						Execute (instruction.Operand as MethodDefinition);
-						break;
-					}
-
-					if (instruction.Operand is MethodReference) {
-						Execute (instruction.Operand as MethodReference);
-						break;
-					}
+			case Code.Callvirt:
+				if (instruction.Operand is MethodDefinition) {
+					Execute (instruction.Operand as MethodDefinition);
+					break;
 				}
-				break;
+
+				if (instruction.Operand is MethodReference) {
+					Execute (instruction.Operand as MethodReference);
+					break;
+				}
+
+				throw new NotSupportedException ("Not supported " + instruction);
 
 			//从当前方法返回，并将返回值（如果存在）从调用方的计算堆栈推送到被调用方的计算堆栈上。
 			case Code.Ret:
@@ -725,19 +738,37 @@ namespace ILRT {
 				}
 
 				if (instruction.Operand is MethodReference) {
-					var methodReference = instruction.Operand as MethodReference;
-					var type = GetType (methodReference.DeclaringType);
-					var obj = type.Assembly.CreateInstance (type.FullName);
-					stack.Push (obj);
-					Execute (methodReference);//构造函数
+					Execute (instruction.Operand as MethodReference);//构造函数
 					break;
 				}
 
 				throw new NotSupportedException ("Not supported " + instruction);
 
+			case Code.Initobj:{
+					var typeReference = instruction.Operand as TypeReference;
+					var classType = GetType (typeReference);
+					var types = GetParameters (methodDefinition);
+					classType.GetConstructor (types);
+
+					var objects = new object [] { 0 };
+
+					var methodReference = methodDefinition;
+
+					if (methodReference.IsGenericInstance) {
+						classType = GetType (methodReference.DeclaringType.GetElementType (), methodReference);
+						var genericType = classType.MakeGenericType (types);
+						var instance = Activator.CreateInstance (genericType, objects);
+						stack.Push (instance);
+					} else {
+						var instance = Activator.CreateInstance (classType, objects);
+						stack.Push (instance);
+					}
+				}
+				break;
+
 			//用新值替换在对象引用或指针的字段中存储的值。
 			case Code.Stfld: {
-					var key = (instruction.Operand as MemberReference).Name;//FieldDefinition
+					var key = (instruction.Operand as MemberReference).Name;
 					var value = stack.Pop ();
 					var dictionary = stack.Pop () as Dictionary<string, object>;
 					dictionary [key] = value;
@@ -747,10 +778,10 @@ namespace ILRT {
 			//查找对象中其引用当前位于计算堆栈的字段的值。
 			case Code.Ldfld:
 			case Code.Ldflda: {
-					var key = (instruction.Operand as MemberReference).Name;//FieldDefinition
+					var key = (instruction.Operand as MemberReference).Name;
 					var dictionary = stack.Pop () as Dictionary<string, object>;
 					dictionary.TryGetValue (key, out object value);
-					stack.Push (value); ;
+					stack.Push (value);
 				}
 				break;
 
