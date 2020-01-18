@@ -787,6 +787,12 @@ namespace ILRT {
 				}
 				break;
 
+			case Code.Isinst: {
+					var value = stack.Pop ();
+					stack.Push (value.GetType ().FullName == (instruction.Operand as TypeReference).FullName);
+				}
+				break;
+
 			//用新值替换在对象引用或指针的字段中存储的值。
 			case Code.Stfld: {
 					var key = (instruction.Operand as MemberReference).Name;
