@@ -1,4 +1,4 @@
-﻿#define ILCORE_DEBUG
+﻿//#define ILCORE_DEBUG
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -39,6 +39,13 @@ namespace ILRT {
 				}
 			}
 
+			if (methodReference != null && methodReference.IsGenericInstance) {
+				var genericArguments = ((GenericInstanceMethod)methodReference).GenericArguments;
+				for (var i = 0; i < genericArguments.Count; i++) {
+					typeName = typeName.Replace ("!!" + i, genericArguments [i].FullName);
+				}
+			}
+
 			var type = Type.GetType (typeName);
 
 			if (type != null)
@@ -74,19 +81,14 @@ namespace ILRT {
 				if (parameters.Length != methodReference.Parameters.Count)
 					continue;
 
-				var types = new List<Type> ();
-
 				var find = true;
 
 				for(var i = 0; i < parameters.Length; i++) {
-					if (parameters [i].ParameterType.Name != GetType (methodReference.Parameters [i].ParameterType, methodReference).Name) {
+					var type = GetType (methodReference.Parameters [i].ParameterType, methodReference);
+					if (parameters [i].ParameterType.FullName != null && parameters [i].ParameterType.Name != type.Name) {
 						find = false;
 						break;
 					}
-
-					//if (parameters [i].ParameterType.IsGenericType)
-					//types.Add (parameters [i].ParameterType);
-					//types.Add (typeof(int));
 				}
 
 				if (!find)
@@ -95,10 +97,28 @@ namespace ILRT {
 				if (!method.ContainsGenericParameters)
 					return method;
 
-				return method.MakeGenericMethod (types.ToArray());
+				var types = GetGenericArguments (methodReference);
+
+				return method.MakeGenericMethod (types);
 			}
 
 			return null;
+		}
+
+		static Type[] GetGenericArguments(MethodReference methodReference)
+		{
+			if (!methodReference.IsGenericInstance)
+				return null;
+
+			var genericArguments = ((GenericInstanceMethod)methodReference).GenericArguments;
+
+			var types = new Type [genericArguments.Count];
+
+			for (var i = 0; i < genericArguments.Count; i++) {
+				types [i] = GetType(genericArguments [i]);
+			}
+
+			return types;
 		}
 
 		static Type[] GetParameters(MethodReference methodReference)
@@ -187,7 +207,7 @@ namespace ILRT {
 			if (methodReference.Name == ".ctor") {
 				if (methodReference.IsGenericInstance) {
 					var classType = GetType (methodReference.DeclaringType.GetElementType (), methodReference);
-					var types = GetParameters (methodReference);
+					var types = GetGenericArguments (methodReference);
 					var genericType = classType.MakeGenericType (types);
 					var instance = Activator.CreateInstance (genericType, objects);
 					stack.Push (instance);
@@ -741,15 +761,14 @@ namespace ILRT {
 			case Code.Initobj:{
 					var typeReference = instruction.Operand as TypeReference;
 					var classType = GetType (typeReference);
-					var types = GetParameters (methodDefinition);
-					classType.GetConstructor (types);
-
+			
 					var objects = new object [] { 0 };
 
 					var methodReference = methodDefinition;
 
 					if (methodReference.IsGenericInstance) {
 						classType = GetType (methodReference.DeclaringType.GetElementType (), methodReference);
+						var types = GetParameters (methodDefinition);
 						var genericType = classType.MakeGenericType (types);
 						var instance = Activator.CreateInstance (genericType, objects);
 						stack.Push (instance);
