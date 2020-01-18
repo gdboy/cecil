@@ -1,4 +1,4 @@
-﻿#define ILCORE_DEBUG
+﻿//#define ILCORE_DEBUG
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -198,7 +198,15 @@ namespace ILRT {
 
 			for (var i = 0; i < parameters.Count; i++) {
 
-				objects [parameters.Count - 1 - i] = stack.Pop ();
+				var value = stack.Pop ();
+
+				switch (GetType(parameters[i].ParameterType).Name) {
+				case "Boolean":
+					value = Convert.ToBoolean (value);
+					break;
+				}
+
+				objects [parameters.Count - 1 - i] = value;
 			}
 
 			if (methodReference.HasThis && methodReference.Name != ".ctor" && !GetType (methodReference.DeclaringType).IsAssignableFrom(peekType))
