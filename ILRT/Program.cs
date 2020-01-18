@@ -1,4 +1,4 @@
-﻿//#define ILCORE_DEBUG
+﻿#define ILCORE_DEBUG
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -57,21 +57,10 @@ namespace ILRT {
 		{
 			if(!methodReference.ContainsGenericParameter) {
 
-				var parameters = methodReference.Parameters;
-
-				var types = new Type [parameters.Count];
-
-				for (var i = 0; i < parameters.Count; i++) {
-
-					var type = GetType (parameters [i].ParameterType);
-
-					types [i] = type;
-				}
-
 				var classType = GetType (methodReference.DeclaringType);
 
-				//if (methodReference.Name == ".ctor")
-				
+				var types = GetParameters(methodReference);
+
 				return classType.GetMethod (methodReference.Name, types);
 			}
 
@@ -178,7 +167,9 @@ namespace ILRT {
 
 			object obj = null;
 
-			if (methodReference.HasThis && methodReference.Name != ".ctor")
+			var peekType = stack.Peek ().GetType ();
+
+			if (methodReference.HasThis && methodReference.Name != ".ctor" && GetType (methodReference.DeclaringType).IsAssignableFrom(peekType))
 				obj = stack.Pop ();
 
 			var parameters = methodReference.Parameters;
@@ -189,6 +180,9 @@ namespace ILRT {
 
 				objects [parameters.Count - 1 - i] = stack.Pop ();
 			}
+
+			if (methodReference.HasThis && methodReference.Name != ".ctor" && !GetType (methodReference.DeclaringType).IsAssignableFrom(peekType))
+				obj = stack.Pop ();
 
 			if (methodReference.Name == ".ctor") {
 				if (methodReference.IsGenericInstance) {
