@@ -1,4 +1,4 @@
-﻿//#define ILCORE_DEBUG
+﻿#define ILCORE_DEBUG
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
