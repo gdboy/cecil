@@ -9,7 +9,7 @@ using System.Reflection;
 
 //指令大全 https://docs.microsoft.com/zh-cn/dotnet/api/system.reflection.emit.opcodes?view=netframework-4.8
 
-namespace ILRT {
+namespace ILCore {
 	class Program {
 		static Stack<object> stack = new Stack<object> ();
 		static Dictionary<int, object> localVars = new Dictionary<int, object> ();//局部变量
@@ -134,14 +134,14 @@ namespace ILRT {
 			return types;
 		}
 
-		static int Compare (object a, object b)
+		static long Compare (object a, object b)
 		{
 			if (a is double || b is double || a is float || b is float) {
 				var result = Convert.ToDouble (a) - Convert.ToDouble (b);
 				return Convert.ToInt32 (result);
 			}
 
-			return Convert.ToInt32 (a) - Convert.ToInt32 (b);
+			return Convert.ToInt64 (a) - Convert.ToInt64 (b);
 		}
 
 		static void Main (string [] args)
@@ -150,11 +150,11 @@ namespace ILRT {
 				Console.WriteLine (item);
 
 
-//#if DEBUG
+#if DEBUG
 			var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Debug/ExampleDll.dll");
-//#else
-			//var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Release/ExampleDll.dll");
-//#endif
+#else
+			var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Release/ExampleDll.dll");
+#endif
 			foreach (var type in module.Types) {
 
 				foreach (var methodDefinition in type.Methods) {
@@ -187,7 +187,10 @@ namespace ILRT {
 
 			object obj = null;
 
-			var peekType = stack.Peek ().GetType ();
+			Type peekType = null;
+   
+			if(stack.Count != 0)
+				peekType = stack.Peek ().GetType ();
 
 			if (methodReference.HasThis && methodReference.Name != ".ctor" && GetType (methodReference.DeclaringType).IsAssignableFrom(peekType))
 				obj = stack.Pop ();
@@ -328,7 +331,7 @@ namespace ILRT {
 		{
 			
 #if ILCORE_DEBUG
-			Console.WriteLine (instruction);
+			//Console.WriteLine (instruction);
 			stackInfo.Add (new KeyValuePair<Instruction, Stack<object>> (instruction, new Stack<object> (stack)));
 #endif
 
@@ -603,7 +606,6 @@ namespace ILRT {
 			case Code.Box:
 			case Code.Unbox:
 			case Code.Unbox_Any:
-				Console.WriteLine (instruction);
 				break;
 
 #region 控制转移
@@ -699,16 +701,16 @@ namespace ILRT {
 					if (value is float || value is double)
 						stack.Push ((int)Convert.ToDouble (value));
 					else
-						stack.Push ((int)value);
+						stack.Push (Convert.ToInt32(value));
 				}
 				break;
 
 			case Code.Conv_I8: {
 					var value = stack.Pop ();
 					if (value is float || value is double)
-						stack.Push ((Int64)Convert.ToDouble (value));
+						stack.Push ((long)Convert.ToDouble (value));
 					else
-						stack.Push ((Int64)value);
+						stack.Push (Convert.ToInt64 (value));
 				}
 				break;
 
