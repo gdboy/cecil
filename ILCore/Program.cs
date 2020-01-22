@@ -1,4 +1,4 @@
-﻿//#define ILCORE_DEBUG
+﻿#define ILCORE_DEBUG
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -174,9 +174,6 @@ namespace ILCore {
 
 		static void Execute (MethodReference methodReference)
 		{
-			if(methodReference.FullName == "System.Void System.Object::.ctor()")
-				return;
-
 			if (methodReference.FullName == "System.Void System.Runtime.CompilerServices.RuntimeHelpers::InitializeArray(System.Array,System.RuntimeFieldHandle)") {
 				var bytes = stack.Pop () as Array;
 				var array = stack.Pop () as Array;
@@ -331,7 +328,7 @@ namespace ILCore {
 		{
 			
 #if ILCORE_DEBUG
-			//Console.WriteLine (instruction);
+			Console.WriteLine (instruction);
 			stackInfo.Add (new KeyValuePair<Instruction, Stack<object>> (instruction, new Stack<object> (stack)));
 #endif
 
@@ -756,8 +753,21 @@ namespace ILCore {
 			//创建一个值类型的新对象或新实例，并将对象引用（O 类型）推送到计算堆栈上。
 			case Code.Newobj:
 				if (instruction.Operand is MethodDefinition) {
-					stack.Push (new Dictionary<string, object> ());
-					Execute (instruction.Operand as MethodDefinition);//构造函数
+					var ctor = instruction.Operand as MethodDefinition;
+					var ctorType = ctor.DeclaringType;
+					var dictionary = new Dictionary<string, object> ();
+					dictionary ["this"] = ctorType;
+					stack.Push (dictionary);
+					Execute (ctor);//构造函数
+
+					while(ctorType != null) {
+						ctorType = ctorType.BaseType as TypeDefinition;
+					}
+
+					//if (methodReference.FullName == "System.Void System.Object::.ctor()") {
+					//	return;
+					//}
+
 					break;
 				}
 

@@ -40,9 +40,68 @@ namespace ExampleDLL
 			return num;
 		}
 
-
-		static void Main (string [] args)
+		private static int Sum(int a, int b)
 		{
+			var sum = 0;
+			for (var i = a; i <= b; i++)
+				sum += i;
+
+			return sum;
+		}
+
+		class TreeNode {
+			public TreeNode left;
+			public TreeNode right;
+			public int value;
+
+			public TreeNode(int v)
+			{
+				value += v;
+			}
+		}
+
+		static void Main2 ()
+		{
+			//Console.WriteLine ("3333333333333333333333333333333333333");
+
+			//int? a = 3;
+
+			//Console.WriteLine (a.Value);
+
+			//a = null;
+
+			//Console.WriteLine (a.Value);
+
+			//var tree = new TreeNode (5);
+			//tree.left = new TreeNode (4);
+			//tree.right = new TreeNode (1);
+
+			//Console.WriteLine ("==============================================");
+
+			//Console.WriteLine (tree.value);
+
+			//Console.WriteLine (tree.right.value);
+
+			//Console.WriteLine (tree.left.value);
+
+			//Console.WriteLine (tree.left.value);
+			//Console.WriteLine (tree.left.a);
+			//Console.WriteLine (tree.left.b);
+
+			//Console.WriteLine (tree.right.value);
+			//Console.WriteLine (tree.right.a);
+			//Console.WriteLine (tree.right.b);
+
+
+
+
+
+
+
+
+
+
+
 			//create delegate instances
 			//NumberChanger2 nc;
 			//var nc1 = new NumberChanger2(AddNum);
@@ -61,120 +120,22 @@ namespace ExampleDLL
 
 
 
+			//var array = new int [] { 1, 3, 2, 5, 4, 6, 7, 1, 2, 3, 4 };
 
+			//var xx = new List<List<int>> ();
 
+			//Console.WriteLine (xx);
 
+			////var list = array.ToList ();
+			//var list = new List<int []> (3);
+			//list.Add (array);
 
-			var array = new int [] { 1, 3, 2, 5, 4, 6, 7, 1, 2, 3, 4 };
+			//Array.Sort (array);
 
-			Array.Sort (array);
-
-			for (var i = 0; i < array.Length; i++) {
-				Console.WriteLine (array [i]);
-			}
+			//for (var i = 0; i < array.Length; i++) {
+			//	Console.WriteLine (array [i]);
+			//}
 		}
-
-		//static void Main()
-		//{
-		//    //var sum = 0;
-		//    //for (var i = 1; i <= 100; i++)
-		//    //    sum += i;
-
-		//    //Console.WriteLine(sum);
-
-
-		//    //int[] arr = new int[6] { -1, 0, 1, 2, -1, -4 };
-
-		//    //IList<IList<int>> triplets = threeSumClose(arr);
-
-		//    //foreach(var a in triplets)
-		//    //{
-		//    //    foreach(var b in a)
-		//    //    {
-		//    //        Console.WriteLine(b);
-		//    //    }
-		//    //}
-
-
-
-
-		//}
-
-
-		public static IList<IList<int>> threeSumClose (int [] nums)
-		{
-			int target = 0;
-			IList<IList<int>> triplets = new List<IList<int>> ();
-			HashSet<string> keys = new HashSet<string> (); // -1, 0, 1 -> key string" "-1,0,1,"
-
-			if (nums == null || nums.Length == 0)
-				return triplets;
-
-			Array.Sort (nums);
-
-			int len = nums.Length;
-
-			for (int i = 0; i < len - 2; i++)  // len = 3, test case passes! 
-			{
-				int [] trialTriplet = new int [3];
-				trialTriplet [0] = nums [i];
-
-				// call two sum function 
-				int newTarget = target - trialTriplet [0];
-				int head = i + 1;
-				int tail = len - 1;
-
-				while (head < tail) {
-					trialTriplet [1] = nums [head];
-					trialTriplet [2] = nums [tail];
-
-					int twoSumValue = trialTriplet [1] + trialTriplet [2];
-
-					if (twoSumValue == newTarget)   // newTarget, not target 
-					{
-						// check if the key is in key hashset or not, 
-						// if yes, then skip it; otherwise, add it to result 
-						string key = getKey (trialTriplet, 3);
-
-						if (!keys.Contains (key)) {
-							keys.Add (key);
-
-							IList<int> triplet = new List<int> ();
-
-							for (int j = 0; j < 3; j++)
-								triplet.Add (trialTriplet [j]);
-
-							triplets.Add (triplet);
-						}
-
-						// continue to search 
-						head++;
-						tail--;
-
-					} else if (twoSumValue > newTarget) {
-						tail--;
-					} else if (twoSumValue < newTarget) {
-						head++;
-					}
-				}
-			}
-
-			return triplets;
-		}
-
-		private static string getKey (int [] arr, int len)
-		{
-			string key = "";
-
-			for (int j = 0; j < 3; j++) {
-				key += arr [j].ToString ();
-				key += ",";
-			}
-
-			return key;
-		}
-
-
 
 	}
 }
