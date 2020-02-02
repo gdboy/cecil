@@ -76,6 +76,15 @@ namespace ILCore {
 
 		static string ConvertTypeName (string typeName)
 		{
+			var array = "";
+			while (typeName.EndsWith ("[]")) {
+				typeName = typeName.Substring (0, typeName.Length - 2);
+				array += "[]";
+			}
+
+			if (array != "")
+				return ConvertTypeName (typeName) + array;
+
 			var start = typeName.IndexOf ("<");
 			var end = typeName.LastIndexOf (">");
 
@@ -115,7 +124,7 @@ namespace ILCore {
 				}
 			}
 
-			if (typeReference.IsGenericInstance)
+			if (typeReference.IsGenericInstance || typeReference.IsArray)
 				typeName = ConvertTypeName (typeName);
 
 			return GetType (typeName);
