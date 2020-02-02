@@ -177,7 +177,17 @@ namespace ILCore {
 
 		static MethodDefinition GetMethod (MethodDefinition methodDefinition)
 		{
+			var childType = (stack.Peek () as Dictionary<string, object>) ["child"] as TypeDefinition;
 
+			foreach(var method in childType.Methods) {
+				if (!method.IsVirtual)
+					continue;
+
+				var methodName = method.FullName.Substring (method.FullName.IndexOf ("::"));
+
+				if (methodDefinition.FullName.Substring (methodDefinition.FullName.IndexOf ("::")) == methodName)
+					return method;
+			}
 
 			return methodDefinition;
 		}
@@ -310,12 +320,12 @@ namespace ILCore {
 				stack.Push (resultValue);
 		}
 
-		static void Execute (MethodDefinition methodDefinition, Instruction instruction = null)
+		static void Execute (MethodDefinition methodDefinition)
 		{
 			if(methodDefinition.IsVirtual)
 				methodDefinition = GetMethod (methodDefinition);
 
-			Console.WriteLine (methodDefinition);
+			//Console.WriteLine (methodDefinition);
 
 			if (!staticFields.ContainsKey (methodDefinition.DeclaringType)) {
 				var dictionary = new Dictionary<string, object> ();
@@ -344,12 +354,17 @@ namespace ILCore {
 				var ctorType = methodDefinition.DeclaringType;
 				var dictionary = new Dictionary<string, object> ();
 				dictionary ["this"] = ctorType;
-				stack.Push (dictionary);
 
-				if(instruction?.OpCode.Code == Code.Newobj) {
-					//dictionary
-
+				object child = null;
+				if(stack.Count > 0) {
+					child = stack.Peek ();
+					if(child is Dictionary<string, object>) {
+						var childType = (child as Dictionary<string, object>) ["this"];
+						dictionary ["child"] = childType;
+					}
 				}
+
+				stack.Push (dictionary);
 			}
 
 			if (methodDefinition.HasThis)
