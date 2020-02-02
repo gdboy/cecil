@@ -6,8 +6,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{9E15669D-5808-4D82-84E4-F846525CAC7B}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>ILRT</RootNamespace>
-    <AssemblyName>ILRT</AssemblyName>
+    <RootNamespace>ILCore</RootNamespace>
+    <AssemblyName>ILCore</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>

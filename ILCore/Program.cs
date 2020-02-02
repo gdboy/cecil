@@ -23,14 +23,83 @@ namespace ILCore {
 		static List<KeyValuePair<Instruction, Stack<object>>> stackInfo = new List<KeyValuePair<Instruction, Stack<object>>>();//每条指令执行时的栈信息
 #endif
 
+		static Type GetType (string typeName)
+		{
+			var type = Type.GetType (typeName);
+
+			if (type != null)
+				return type;
+
+			foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies ()) {
+				type = assembly.GetType (typeName);
+
+				if (type != null)
+					return type;
+			}
+
+			return null;
+		}
+
+		static string [] SplitTypeName (string typeName)
+		{
+			var types = new List<string> ();
+
+			var startIndex = 0;
+
+			var open = 0;
+
+			for (var i = 0; i < typeName.Length; i++) {
+				var c = typeName [i];
+
+				switch (c) {
+				case '<':
+					open++;
+					break;
+
+				case '>':
+					open--;
+					break;
+
+				case ',':
+					if (open == 0) {
+						types.Add (typeName.Substring (startIndex, i - startIndex));
+						startIndex = i + 1;
+					}
+					break;
+				}
+			}
+
+			types.Add (typeName.Substring (startIndex));
+
+			return types.ToArray ();
+		}
+
+		static string ConvertTypeName (string typeName)
+		{
+			var start = typeName.IndexOf ("<");
+			var end = typeName.LastIndexOf (">");
+
+			if (start == end)
+				return GetType (typeName).AssemblyQualifiedName;
+
+			var subTypeName = typeName.Substring (start + 1, end - 1 - start);
+
+			var types = SplitTypeName (subTypeName);
+
+			for (var i = 0; i < types.Length; i++) {
+				var type = ConvertTypeName (types [i]);
+				types [i] = "[" + GetType (type).AssemblyQualifiedName + "]";
+			}
+
+			subTypeName = string.Join (",", types);
+
+			return typeName.Substring (0, start) + "[" + subTypeName + "]" + typeName.Substring (end, typeName.Length - 1 - end);
+		}
+
 		//泛型需要结合MethodReference的参数得到具体类型信息
 		static Type GetType (TypeReference typeReference, MethodReference methodReference = null)
 		{
 			var typeName = typeReference.FullName;
-
-			if (typeReference.IsGenericInstance) {
-				typeName = typeName.Replace ("<", "[[").Replace (">", "]]");
-			}
 
 			if (typeReference.IsGenericParameter) {
 				var genericArguments = ((GenericInstanceType)methodReference.DeclaringType).GenericArguments;
@@ -46,18 +115,10 @@ namespace ILCore {
 				}
 			}
 
-			var type = Type.GetType (typeName);
+			if (typeReference.IsGenericInstance)
+				typeName = ConvertTypeName (typeName);
 
-			if (type != null)
-				return type;
-
-			foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies ()) {
-				type = assembly.GetType (typeName);
-				if (type != null)
-					return type;
-			}
-
-			return null;
+			return GetType (typeName);
 		}
 
 		static MethodInfo GetMethod (MethodReference methodReference)
@@ -105,6 +166,13 @@ namespace ILCore {
 			return null;
 		}
 
+		static MethodDefinition GetMethod (MethodDefinition methodDefinition)
+		{
+
+
+			return methodDefinition;
+		}
+
 		static Type[] GetGenericArguments(MethodReference methodReference)
 		{
 			if (!methodReference.IsGenericInstance)
@@ -115,7 +183,7 @@ namespace ILCore {
 			var types = new Type [genericArguments.Count];
 
 			for (var i = 0; i < genericArguments.Count; i++) {
-				types [i] = GetType(genericArguments [i]);
+				types [i] = GetType(genericArguments [i], methodReference);
 			}
 
 			return types;
@@ -174,24 +242,20 @@ namespace ILCore {
 
 		static void Execute (MethodReference methodReference)
 		{
-			if (methodReference.FullName == "System.Void System.Runtime.CompilerServices.RuntimeHelpers::InitializeArray(System.Array,System.RuntimeFieldHandle)") {
-				var bytes = stack.Pop () as Array;
-				var array = stack.Pop () as Array;
+			switch(methodReference.FullName) {
+			case "System.Void System.Object::.ctor()":
+				return;
 
-				Buffer.BlockCopy (bytes, 0, array, 0, bytes.Length);
+			case "System.Void System.Runtime.CompilerServices.RuntimeHelpers::InitializeArray(System.Array,System.RuntimeFieldHandle)":
+				{
+					var bytes = stack.Pop () as Array;
+					var array = stack.Pop () as Array;
+
+					Buffer.BlockCopy (bytes, 0, array, 0, bytes.Length);
+				}
 				return;
 			}
-
-			object obj = null;
-
-			Type peekType = null;
-   
-			if(stack.Count != 0)
-				peekType = stack.Peek ().GetType ();
-
-			if (methodReference.HasThis && methodReference.Name != ".ctor" && GetType (methodReference.DeclaringType).IsAssignableFrom(peekType))
-				obj = stack.Pop ();
-
+			
 			var parameters = methodReference.Parameters;
 
 			var objects = new object [parameters.Count];
@@ -200,7 +264,7 @@ namespace ILCore {
 
 				var value = stack.Pop ();
 
-				switch (GetType(parameters[i].ParameterType).Name) {
+				switch (GetType(parameters[i].ParameterType, methodReference).Name) {
 				case "Boolean":
 					value = Convert.ToBoolean (value);
 					break;
@@ -208,9 +272,6 @@ namespace ILCore {
 
 				objects [parameters.Count - 1 - i] = value;
 			}
-
-			if (methodReference.HasThis && methodReference.Name != ".ctor" && !GetType (methodReference.DeclaringType).IsAssignableFrom(peekType))
-				obj = stack.Pop ();
 
 			if (methodReference.Name == ".ctor") {
 				if (methodReference.IsGenericInstance) {
@@ -227,6 +288,11 @@ namespace ILCore {
 				return;
 			}
 
+			object obj = null;
+
+			if (methodReference.HasThis)
+				obj = stack.Pop ();
+
 			var method = GetMethod (methodReference);
 
 			var resultValue = method.Invoke (obj, objects);
@@ -235,8 +301,11 @@ namespace ILCore {
 				stack.Push (resultValue);
 		}
 
-		static void Execute (MethodDefinition methodDefinition)
+		static void Execute (MethodDefinition methodDefinition, Instruction instruction = null)
 		{
+			if(methodDefinition.IsVirtual)
+				methodDefinition = GetMethod (methodDefinition);
+
 			Console.WriteLine (methodDefinition);
 
 			if (!staticFields.ContainsKey (methodDefinition.DeclaringType)) {
@@ -245,7 +314,7 @@ namespace ILCore {
 				staticFields [methodDefinition.DeclaringType] = dictionary;
 
 				foreach (var method in methodDefinition.DeclaringType.Methods) {
-					if (method.Name == ".cctor")//静态构造函数
+					if (method.IsStatic && method.IsConstructor)//静态构造函数
 					{
 						Execute (method);
 						break;
@@ -258,27 +327,39 @@ namespace ILCore {
 			localArgsStack.Push (localArgs);
 			localArgs = new object [parameters.Count + (methodDefinition.HasThis ? 1 : 0)];
 
-			if (methodDefinition.HasThis)
-				localArgs [0] = stack.Pop ();
-
 			for (var i = 0; i < parameters.Count; i++) {
 				localArgs [localArgs.Length - 1 - i] = stack.Pop ();
 			}
+
+			if (!methodDefinition.IsStatic && methodDefinition.IsConstructor) {
+				var ctorType = methodDefinition.DeclaringType;
+				var dictionary = new Dictionary<string, object> ();
+				dictionary ["this"] = ctorType;
+				stack.Push (dictionary);
+
+				if(instruction?.OpCode.Code == Code.Newobj) {
+					//dictionary
+
+				}
+			}
+
+			if (methodDefinition.HasThis)
+				localArgs [0] = stack.Pop ();
 
 			localVarsStack.Push (localVars);
 			localVars = new Dictionary<int, object> ();
 
 			if (methodDefinition.HasBody) {
-				var instruction = methodDefinition.Body.Instructions [0]; ;
+				var nextInstruction = methodDefinition.Body.Instructions [0]; ;
 
 				ExceptionHandler finallyHandler = null;
 
 				do {
 					//try {
-						instruction = Execute (instruction, methodDefinition);
+						nextInstruction = Execute (nextInstruction, methodDefinition);
 
-						if (finallyHandler != null && instruction == null) {
-							instruction = finallyHandler.HandlerStart;
+						if (finallyHandler != null && nextInstruction == null) {
+							nextInstruction = finallyHandler.HandlerStart;
 							finallyHandler = null;
 						}
 					//}
@@ -305,7 +386,7 @@ namespace ILCore {
 					//	if (lastExceptionHandler.HandlerType == ExceptionHandlerType.Finally)
 					//		finallyHandler = lastExceptionHandler;
 					//}
-				} while (instruction != null);
+				} while (nextInstruction != null);
 			} else {//委托
 				switch (methodDefinition.Name) {
 				case ".ctor":
@@ -732,7 +813,7 @@ namespace ILCore {
 					break;
 				}
 
-				throw new NotSupportedException ("Not supported " + instruction);
+				break;
 
 			//从当前方法返回，并将返回值（如果存在）从调用方的计算堆栈推送到被调用方的计算堆栈上。
 			case Code.Ret:
@@ -755,18 +836,14 @@ namespace ILCore {
 				if (instruction.Operand is MethodDefinition) {
 					var ctor = instruction.Operand as MethodDefinition;
 					var ctorType = ctor.DeclaringType;
-					var dictionary = new Dictionary<string, object> ();
-					dictionary ["this"] = ctorType;
-					stack.Push (dictionary);
+					//var dictionary = new Dictionary<string, object> ();
+					//dictionary ["this"] = ctorType;
+					//stack.Push (dictionary);
 					Execute (ctor);//构造函数
 
 					while(ctorType != null) {
 						ctorType = ctorType.BaseType as TypeDefinition;
 					}
-
-					//if (methodReference.FullName == "System.Void System.Object::.ctor()") {
-					//	return;
-					//}
 
 					break;
 				}
@@ -780,7 +857,7 @@ namespace ILCore {
 
 			case Code.Initobj:{
 					var typeReference = instruction.Operand as TypeReference;
-					var classType = GetType (typeReference);
+					var classType = GetType (typeReference, methodDefinition);
 			
 					var objects = new object [] { 0 };
 
@@ -788,7 +865,7 @@ namespace ILCore {
 
 					if (methodReference.IsGenericInstance) {
 						classType = GetType (methodReference.DeclaringType.GetElementType (), methodReference);
-						var types = GetParameters (methodDefinition);
+						var types = GetParameters (methodReference);
 						var genericType = classType.MakeGenericType (types);
 						var instance = Activator.CreateInstance (genericType, objects);
 						stack.Push (instance);
@@ -853,9 +930,6 @@ namespace ILCore {
 			//将对新的从零开始的一维数组（其元素属于特定类型）的对象引用推送到计算堆栈上。
 			case Code.Newarr: {
 					var type = GetType (instruction.Operand as TypeReference);
-
-					if (type == null)
-						type = typeof (object);
 
 					var length = Convert.ToInt32 (stack.Pop ());
 					var array = Array.CreateInstance (type, length);
