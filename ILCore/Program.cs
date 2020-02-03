@@ -304,9 +304,9 @@ namespace ILCore {
 				stack.Push (resultValue);
 		}
 
-		static void Execute (MethodDefinition methodDefinition)
+		static void Execute (MethodDefinition methodDefinition, bool isCallvirt = false)
 		{
-			if(methodDefinition.IsVirtual)
+			if(isCallvirt && methodDefinition.IsVirtual)
 				methodDefinition = (stack.Peek () as ILObject).GetMethod (methodDefinition);
 
 			//Console.WriteLine (methodDefinition);
@@ -808,7 +808,7 @@ namespace ILCore {
 			case Code.Call:
 			case Code.Callvirt:
 				if (instruction.Operand is MethodDefinition) {
-					Execute (instruction.Operand as MethodDefinition);
+					Execute (instruction.Operand as MethodDefinition, instruction.OpCode.Code == Code.Callvirt);
 					break;
 				}
 
