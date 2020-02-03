@@ -10,6 +10,12 @@ using System.Reflection;
 //指令大全 https://docs.microsoft.com/zh-cn/dotnet/api/system.reflection.emit.opcodes?view=netframework-4.8
 
 namespace ILCore {
+
+	class ILObject {
+		public Dictionary<string, object> fields = new Dictionary<string, object>();
+		public Dictionary<string, MethodDefinition> methods = new Dictionary<string, MethodDefinition> ();
+	}
+
 	class Program {
 		static Stack<object> stack = new Stack<object> ();
 		static Dictionary<int, object> localVars = new Dictionary<int, object> ();//局部变量
@@ -177,7 +183,7 @@ namespace ILCore {
 
 		static MethodDefinition GetMethod (MethodDefinition methodDefinition)
 		{
-			var childType = (stack.Peek () as Dictionary<string, object>) ["child"] as TypeDefinition;
+			var childType = (stack.Peek () as ILObject).fields["." + methodDefinition.DeclaringType.FullName] as TypeDefinition;
 
 			foreach(var method in childType.Methods) {
 				if (!method.IsVirtual)
@@ -352,19 +358,20 @@ namespace ILCore {
 
 			if (!methodDefinition.IsStatic && methodDefinition.IsConstructor) {
 				var ctorType = methodDefinition.DeclaringType;
-				var dictionary = new Dictionary<string, object> ();
-				dictionary ["this"] = ctorType;
-
-				object child = null;
+				
+				ILObject runtimeObject = null;
+				
 				if(stack.Count > 0) {
-					child = stack.Peek ();
-					if(child is Dictionary<string, object>) {
-						var childType = (child as Dictionary<string, object>) ["this"];
-						dictionary ["child"] = childType;
-					}
+					runtimeObject = stack.Peek () as ILObject;
+					runtimeObject.fields ["." + ctorType.FullName] = ctorType;
 				}
 
-				stack.Push (dictionary);
+				if (runtimeObject == null) {
+					runtimeObject = new ILObject();
+					runtimeObject.fields["this"] = ctorType;
+				}
+
+				stack.Push (runtimeObject);
 			}
 
 			if (methodDefinition.HasThis)
@@ -854,20 +861,18 @@ namespace ILCore {
 				stack.Push (((FieldDefinition)instruction.Operand).InitialValue);
 				break;
 
-#region 类和对象
+			#region 类和对象
 			//创建一个值类型的新对象或新实例，并将对象引用（O 类型）推送到计算堆栈上。
 			case Code.Newobj:
 				if (instruction.Operand is MethodDefinition) {
 					var ctor = instruction.Operand as MethodDefinition;
-					var ctorType = ctor.DeclaringType;
-					//var dictionary = new Dictionary<string, object> ();
-					//dictionary ["this"] = ctorType;
-					//stack.Push (dictionary);
+					
 					Execute (ctor);//构造函数
 
-					while(ctorType != null) {
-						ctorType = ctorType.BaseType as TypeDefinition;
-					}
+					//var ctorType = ctor.DeclaringType;
+					//while(ctorType != null) {
+					//	ctorType = ctorType.BaseType as TypeDefinition;
+					//}
 
 					break;
 				}
@@ -878,7 +883,8 @@ namespace ILCore {
 				}
 
 				throw new NotSupportedException ("Not supported " + instruction);
-
+				
+			//将位于指定地址的值类型的每个字段初始化为空引用或适当的基元类型的 0。
 			case Code.Initobj:{
 					var typeReference = instruction.Operand as TypeReference;
 					var classType = GetType (typeReference, methodDefinition);
@@ -900,6 +906,7 @@ namespace ILCore {
 				}
 				break;
 
+			//测试对象引用（O 类型）是否为特定类的实例。
 			case Code.Isinst: {
 					var value = stack.Pop ();
 					stack.Push (value.GetType ().FullName == (instruction.Operand as TypeReference).FullName);
@@ -910,8 +917,8 @@ namespace ILCore {
 			case Code.Stfld: {
 					var key = (instruction.Operand as MemberReference).Name;
 					var value = stack.Pop ();
-					var dictionary = stack.Pop () as Dictionary<string, object>;
-					dictionary [key] = value;
+					var runtimeObject = stack.Pop () as ILObject;
+					runtimeObject.fields[key] = value;
 				}
 				break;
 
@@ -919,8 +926,8 @@ namespace ILCore {
 			case Code.Ldfld:
 			case Code.Ldflda: {
 					var key = (instruction.Operand as MemberReference).Name;
-					var dictionary = stack.Pop () as Dictionary<string, object>;
-					dictionary.TryGetValue (key, out object value);
+					var runtimeObject = stack.Pop () as ILObject;
+					runtimeObject.fields.TryGetValue (key, out object value);
 					stack.Push (value);
 				}
 				break;
