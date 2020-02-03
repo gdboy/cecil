@@ -77,14 +77,14 @@ namespace ILCore {
 
 		static string ConvertTypeName (string typeName)
 		{
-			var array = "";
-			while (typeName.EndsWith ("[]")) {
-				typeName = typeName.Substring (0, typeName.Length - 2);
-				array += "[]";
-			}
+			//var array = "";
+			//while (typeName.EndsWith ("[]")) {
+			//	typeName = typeName.Substring (0, typeName.Length - 2);
+			//	array += "[]";
+			//}
 
-			if (array != "")
-				return ConvertTypeName (typeName) + array;
+			//if (array != "")
+			//	return ConvertTypeName (typeName) + array;
 
 			var start = typeName.IndexOf ("<");
 			var end = typeName.LastIndexOf (">");
@@ -306,8 +306,16 @@ namespace ILCore {
 
 		static void Execute (MethodDefinition methodDefinition, bool isCallvirt = false)
 		{
-			if(isCallvirt && methodDefinition.IsVirtual)
+			if(isCallvirt && methodDefinition.IsVirtual) {
+				var parameterStack = new Stack<object> ();
+				for (var i = 0; i < methodDefinition.Parameters.Count; i++)
+					parameterStack.Push (stack.Pop ());
+
 				methodDefinition = (stack.Peek () as ILObject).GetMethod (methodDefinition);
+				
+				for (var i = 0; i < methodDefinition.Parameters.Count; i++)
+					stack.Push (parameterStack.Pop ());
+			}
 
 			//Console.WriteLine (methodDefinition);
 
