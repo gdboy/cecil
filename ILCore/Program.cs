@@ -11,12 +11,6 @@ using System.Reflection;
 
 namespace ILCore {
 
-	class ILObject {
-		public TypeDefinition type;
-		public Dictionary<string, object> fields = new Dictionary<string, object>();
-		public Dictionary<string, MethodDefinition> methods = new Dictionary<string, MethodDefinition> ();
-	}
-
 	class Program {
 		static Stack<object> stack = new Stack<object> ();
 		static Dictionary<int, object> localVars = new Dictionary<int, object> ();//局部变量
@@ -181,24 +175,7 @@ namespace ILCore {
 
 			return null;
 		}
-
-		static MethodDefinition GetMethod (MethodDefinition methodDefinition)
-		{
-			var childType = (stack.Peek () as ILObject).fields["base." + methodDefinition.DeclaringType.FullName] as TypeDefinition;
-
-			foreach(var method in childType.Methods) {
-				if (!method.IsVirtual)
-					continue;
-
-				var methodName = method.FullName.Substring (method.FullName.IndexOf ("::"));
-
-				if (methodDefinition.FullName.Substring (methodDefinition.FullName.IndexOf ("::")) == methodName)
-					return method;
-			}
-
-			return methodDefinition;
-		}
-
+		
 		static Type[] GetGenericArguments(MethodReference methodReference)
 		{
 			if (!methodReference.IsGenericInstance)
@@ -330,7 +307,7 @@ namespace ILCore {
 		static void Execute (MethodDefinition methodDefinition)
 		{
 			if(methodDefinition.IsVirtual)
-				methodDefinition = GetMethod (methodDefinition);
+				methodDefinition = (stack.Peek () as ILObject).GetMethod (methodDefinition);
 
 			//Console.WriteLine (methodDefinition);
 
@@ -360,20 +337,14 @@ namespace ILCore {
 			if (!methodDefinition.IsStatic && methodDefinition.IsConstructor) {
 				var ctorType = methodDefinition.DeclaringType;
 				
-				ILObject runtimeObject = null;
-				
-				if(stack.Count > 0) {
-					runtimeObject = stack.Peek () as ILObject;
-					runtimeObject.fields ["base." + ctorType.FullName] = ctorType;
+				if(stack.Count > 0 && stack.Peek() is ILObject) {
+					(stack.Peek () as ILObject).SetValue("base." + ctorType.FullName, ctorType);
 				}
-
-				if (runtimeObject == null) {
-					runtimeObject = new ILObject {
+				else {
+					stack.Push (new ILObject {
 						type = ctorType
-					};
+					});
 				}
-
-				stack.Push (runtimeObject);
 			}
 
 			if (methodDefinition.HasThis)
@@ -918,11 +889,11 @@ namespace ILCore {
 			//用新值替换在对象引用或指针的字段中存储的值。
 			case Code.Stfld: {
 					var fieldReference = (instruction.Operand as FieldReference);
-					var key = fieldReference.DeclaringType + "." + fieldReference.Name;
+					var key = fieldReference.DeclaringType + "::" + fieldReference.Name;
 					var value = stack.Pop ();
 					var obj = stack.Pop ();
 					if(obj is ILObject)
-						(obj as ILObject).fields[key] = value;
+						(obj as ILObject).SetValue(key, value);
 					else
 						obj.SetFieldValue (key, value);
 				}
@@ -932,11 +903,11 @@ namespace ILCore {
 			case Code.Ldfld:
 			case Code.Ldflda: {
 					var fieldReference = (instruction.Operand as FieldReference);
-					var key = fieldReference.DeclaringType + "." + fieldReference.Name;
+					var key = fieldReference.DeclaringType + "::" + fieldReference.Name;
 					var obj = stack.Pop ();
 					object value = null;
 					if (obj is ILObject)
-						(obj as ILObject).fields.TryGetValue (key, out value);
+						value = (obj as ILObject).GetValue (key);
 					else
 						value = obj.GetFieldValue (key);
 					stack.Push (value);
