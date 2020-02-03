@@ -1,4 +1,4 @@
-﻿#define ILCORE_DEBUG
+﻿//#define ILCORE_DEBUG
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -12,6 +12,7 @@ using System.Reflection;
 namespace ILCore {
 
 	class ILObject {
+		public TypeDefinition type;
 		public Dictionary<string, object> fields = new Dictionary<string, object>();
 		public Dictionary<string, MethodDefinition> methods = new Dictionary<string, MethodDefinition> ();
 	}
@@ -183,7 +184,7 @@ namespace ILCore {
 
 		static MethodDefinition GetMethod (MethodDefinition methodDefinition)
 		{
-			var childType = (stack.Peek () as ILObject).fields["." + methodDefinition.DeclaringType.FullName] as TypeDefinition;
+			var childType = (stack.Peek () as ILObject).fields["base." + methodDefinition.DeclaringType.FullName] as TypeDefinition;
 
 			foreach(var method in childType.Methods) {
 				if (!method.IsVirtual)
@@ -363,12 +364,13 @@ namespace ILCore {
 				
 				if(stack.Count > 0) {
 					runtimeObject = stack.Peek () as ILObject;
-					runtimeObject.fields ["." + ctorType.FullName] = ctorType;
+					runtimeObject.fields ["base." + ctorType.FullName] = ctorType;
 				}
 
 				if (runtimeObject == null) {
-					runtimeObject = new ILObject();
-					runtimeObject.fields["this"] = ctorType;
+					runtimeObject = new ILObject {
+						type = ctorType
+					};
 				}
 
 				stack.Push (runtimeObject);
@@ -917,8 +919,11 @@ namespace ILCore {
 			case Code.Stfld: {
 					var key = (instruction.Operand as MemberReference).Name;
 					var value = stack.Pop ();
-					var runtimeObject = stack.Pop () as ILObject;
-					runtimeObject.fields[key] = value;
+					var obj = stack.Pop ();
+					if(obj is ILObject)
+						(obj as ILObject).fields[key] = value;
+					else
+						obj.SetFieldValue (key, value);
 				}
 				break;
 
