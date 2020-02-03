@@ -917,7 +917,8 @@ namespace ILCore {
 
 			//用新值替换在对象引用或指针的字段中存储的值。
 			case Code.Stfld: {
-					var key = (instruction.Operand as MemberReference).Name;
+					var fieldReference = (instruction.Operand as FieldReference);
+					var key = fieldReference.DeclaringType + "." + fieldReference.Name;
 					var value = stack.Pop ();
 					var obj = stack.Pop ();
 					if(obj is ILObject)
@@ -930,7 +931,8 @@ namespace ILCore {
 			//查找对象中其引用当前位于计算堆栈的字段的值。
 			case Code.Ldfld:
 			case Code.Ldflda: {
-					var key = (instruction.Operand as MemberReference).Name;
+					var fieldReference = (instruction.Operand as FieldReference);
+					var key = fieldReference.DeclaringType + "." + fieldReference.Name;
 					var obj = stack.Pop ();
 					object value = null;
 					if (obj is ILObject)
