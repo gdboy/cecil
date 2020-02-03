@@ -931,8 +931,12 @@ namespace ILCore {
 			case Code.Ldfld:
 			case Code.Ldflda: {
 					var key = (instruction.Operand as MemberReference).Name;
-					var runtimeObject = stack.Pop () as ILObject;
-					runtimeObject.fields.TryGetValue (key, out object value);
+					var obj = stack.Pop ();
+					object value = null;
+					if (obj is ILObject)
+						(obj as ILObject).fields.TryGetValue (key, out value);
+					else
+						value = obj.GetFieldValue (key);
 					stack.Push (value);
 				}
 				break;
