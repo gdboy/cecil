@@ -220,6 +220,7 @@ namespace ILCore {
 			foreach (var item in new int [] { 1, 3, 2, 5, 4 }.ToList ())
 				Console.WriteLine (item);
 
+			Assembly.LoadFrom (@"F:\workspace\GameCenter\UnityAssemblies\UnityEngine.CoreModule.dll");
 
 #if DEBUG
 			var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Debug/ExampleDll.dll");
@@ -360,6 +361,15 @@ namespace ILCore {
 
 			localVarsStack.Push (localVars);
 			localVars = new object [methodDefinition.Body.Variables.Count];
+
+			for(var i=0;i<methodDefinition.Body.Variables.Count;i++) {
+				var variableType = methodDefinition.Body.Variables [i].VariableType;
+				if (variableType is TypeDefinition)
+					continue;
+
+				var type = GetType (variableType, methodDefinition);
+				localVars [i] = Activator.CreateInstance (type);
+			}
 
 			if (methodDefinition.HasBody) {
 				var nextInstruction = methodDefinition.Body.Instructions [0]; ;
@@ -895,13 +905,12 @@ namespace ILCore {
 			//用新值替换在对象引用或指针的字段中存储的值。
 			case Code.Stfld: {
 					var fieldReference = (instruction.Operand as FieldReference);
-					var key = fieldReference.DeclaringType + "::" + fieldReference.Name;
 					var value = stack.Pop ();
 					var obj = stack.Pop ();
 					if(obj is ILObject)
-						(obj as ILObject).SetValue(key, value);
+						(obj as ILObject).SetValue(fieldReference.DeclaringType + "::" + fieldReference.Name, value);
 					else
-						obj.SetFieldValue (key, value);
+						obj.SetFieldValue (fieldReference.Name, value);
 				}
 				break;
 
@@ -909,13 +918,12 @@ namespace ILCore {
 			case Code.Ldfld:
 			case Code.Ldflda: {
 					var fieldReference = (instruction.Operand as FieldReference);
-					var key = fieldReference.DeclaringType + "::" + fieldReference.Name;
 					var obj = stack.Pop ();
 					object value = null;
 					if (obj is ILObject)
-						value = (obj as ILObject).GetValue (key);
+						value = (obj as ILObject).GetValue (fieldReference.DeclaringType + "::" + fieldReference.Name);
 					else
-						value = obj.GetFieldValue (key);
+						value = obj.GetFieldValue (fieldReference.Name);
 					stack.Push (value);
 				}
 				break;
