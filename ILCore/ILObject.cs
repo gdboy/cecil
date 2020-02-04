@@ -44,5 +44,10 @@ namespace ILCore {
 		}
 
 		#endregion
+
+		public override string ToString ()
+		{
+			return type.FullName;
+		}
 	}
 }
