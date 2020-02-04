@@ -1,4 +1,4 @@
-﻿//#define ILCORE_DEBUG
+﻿#define ILCORE_DEBUG
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -671,7 +671,7 @@ namespace ILCore {
 					var b = stack.Pop ();
 					var a = stack.Pop ();
 
-					stack.Push (a.Equals (b) ? 1 : 0);
+					stack.Push (object.Equals (a, b) ? 1 : 0);
 				}
 				break;
 
