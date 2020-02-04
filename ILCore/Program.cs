@@ -13,8 +13,8 @@ namespace ILCore {
 
 	class Program {
 		static Stack<object> stack = new Stack<object> ();
-		static Dictionary<int, object> localVars = new Dictionary<int, object> ();//局部变量
-		static Stack<Dictionary<int, object>> localVarsStack = new Stack<Dictionary<int, object>> ();//局部变量栈
+		static object [] localVars = null;//局部变量
+		static Stack<object []> localVarsStack = new Stack<object []> ();//局部变量栈
 		static object [] localArgs = null;//函数参数
 		static Stack<object []> localArgsStack = new Stack<object []> ();//函数参数栈
 
@@ -359,7 +359,7 @@ namespace ILCore {
 				localArgs [0] = stack.Pop ();
 
 			localVarsStack.Push (localVars);
-			localVars = new Dictionary<int, object> ();
+			localVars = new object [methodDefinition.Body.Variables.Count];
 
 			if (methodDefinition.HasBody) {
 				var nextInstruction = methodDefinition.Body.Instructions [0]; ;
@@ -486,8 +486,7 @@ namespace ILCore {
 			case Code.Ldloc_2:
 			case Code.Ldloc_3: {
 					var index = instruction.OpCode.Code - Code.Ldloc_0;
-					if (localVars.TryGetValue (index, out object value))
-						stack.Push (value);
+					stack.Push (localVars[index]);
 				}
 				break;
 
@@ -497,9 +496,8 @@ namespace ILCore {
 			//将位于特定索引处的局部变量的地址加载到计算堆栈上。
 			case Code.Ldloca_S:
 			case Code.Ldloca: {
-					var index = ((VariableReference)instruction.Operand).Index;
-					if (localVars.TryGetValue (index, out object value))
-						stack.Push (value);
+					var index = (instruction.Operand as VariableReference).Index;
+					stack.Push (localVars [index]);
 				}
 				break;
 #endregion
