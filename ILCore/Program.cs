@@ -221,6 +221,7 @@ namespace ILCore {
 				Console.WriteLine (item);
 
 			Assembly.LoadFrom (@"F:\workspace\GameCenter\UnityAssemblies\UnityEngine.CoreModule.dll");
+			Assembly.LoadFrom (@"F:\workspace\cecil\ExampleDLL2\bin\Debug\ExampleDLL2.dll");
 
 #if DEBUG
 			var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Debug/ExampleDll.dll");
@@ -364,7 +365,7 @@ namespace ILCore {
 
 			for(var i=0;i<methodDefinition.Body.Variables.Count;i++) {
 				var variableType = methodDefinition.Body.Variables [i].VariableType;
-				if (variableType is TypeDefinition)
+				if (variableType is TypeDefinition || !variableType.IsValueType)
 					continue;
 
 				var type = GetType (variableType, methodDefinition);
@@ -897,8 +898,17 @@ namespace ILCore {
 
 			//测试对象引用（O 类型）是否为特定类的实例。
 			case Code.Isinst: {
+					var typeName = (instruction.Operand as TypeReference).FullName;
 					var value = stack.Pop ();
-					stack.Push (value.GetType ().FullName == (instruction.Operand as TypeReference).FullName);
+					if(value == null) {
+						stack.Push (null);
+						break;
+					}
+
+					if (value is ILObject)
+						stack.Push ((value as ILObject).type.FullName == typeName ? value : null);
+					else
+						stack.Push (value.GetType().FullName == typeName ? value : null);
 				}
 				break;
 
