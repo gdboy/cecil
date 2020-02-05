@@ -638,6 +638,7 @@ namespace ILCore {
 				break;
 			#endregion
 
+			#region 位操作
 			//计算两个值的按位“与”并将结果推送到计算堆栈上。
 			case Code.And: {
 					var b = stack.Pop ();
@@ -646,6 +647,8 @@ namespace ILCore {
 					stack.Push (Convert.ToInt64 (a) & Convert.ToInt64 (b));
 				}
 				break;
+
+			//计算位于堆栈顶部的两个整数值的按位求补并将结果推送到计算堆栈上。
 			case Code.Or: {
 					var b = stack.Pop ();
 					var a = stack.Pop ();
@@ -653,6 +656,8 @@ namespace ILCore {
 					stack.Push (Convert.ToInt64 (a) | Convert.ToInt64 (b));
 				}
 				break;
+
+			//计算位于计算堆栈顶部的两个值的按位异或，并且将结果推送到计算堆栈上。
 			case Code.Xor: {
 					var b = stack.Pop ();
 					var a = stack.Pop ();
@@ -660,13 +665,16 @@ namespace ILCore {
 					stack.Push (Convert.ToInt64 (a) ^ Convert.ToInt64 (b));
 				}
 				break;
+
 			//case Code.Shl:
 			//case Code.Shr:
 			//case Code.Shr_Un:
 			//case Code.Neg:
 			//case Code.Not:
 
-#region 比较结果
+			#endregion
+
+			#region 比较结果
 			//比较两个值。如果这两个值相等，则将整数值 1 (int32) 推送到计算堆栈上；否则，将 0 (int32) 推送到计算堆栈上。
 			case Code.Ceq: {
 					var b = stack.Pop ();
@@ -696,16 +704,6 @@ namespace ILCore {
 				}
 				break;
 #endregion
-
-			//推送对元数据中存储的字符串的新对象引用。
-			case Code.Ldstr:
-				stack.Push (instruction.Operand);
-				break;
-
-			case Code.Box:
-			case Code.Unbox:
-			case Code.Unbox_Any:
-				break;
 
 #region 控制转移
 			//无条件地将控制转移到目标指令。
@@ -737,7 +735,7 @@ namespace ILCore {
 			case Code.Beq: {
 					var b = stack.Pop ();
 					var a = stack.Pop ();
-					if (a.Equals (b))
+					if (object.Equals (a, b))
 						next = (Instruction)instruction.Operand;
 				}
 				break;
@@ -790,8 +788,9 @@ namespace ILCore {
 			case Code.Leave:
 				next = (Instruction)instruction.Operand;
 				break;
-#endregion
+			#endregion
 
+			#region 类型转换
 			//将位于计算堆栈顶部的值转换为 int32。
 			case Code.Conv_I1:
 			case Code.Conv_I2:
@@ -820,8 +819,19 @@ namespace ILCore {
 			case Code.Conv_R8:
 				stack.Push (Convert.ToDouble (stack.Pop ()));
 				break;
+			#endregion
 
-#region 函数和委托
+			//推送对元数据中存储的字符串的新对象引用。
+			case Code.Ldstr:
+				stack.Push (instruction.Operand);
+				break;
+
+			case Code.Box:
+			case Code.Unbox:
+			case Code.Unbox_Any:
+				break;
+
+			#region 函数和委托
 			case Code.Call:
 			case Code.Callvirt:
 				if (instruction.Operand is MethodDefinition) {
