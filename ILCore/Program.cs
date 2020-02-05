@@ -109,6 +109,9 @@ namespace ILCore {
 		//泛型需要结合MethodReference的参数得到具体类型信息
 		static Type GetType (TypeReference typeReference, MethodReference methodReference = null)
 		{
+			if (typeReference is TypeDefinition)
+				return typeof(ILObject);
+
 			var typeName = typeReference.FullName;
 
 			if (typeReference.IsGenericParameter) {
@@ -339,9 +342,9 @@ namespace ILCore {
 				stack.Push (resultValue);
 		}
 
-		static void Execute (MethodDefinition methodDefinition, bool isCallvirt = false)
+		static void Execute (MethodDefinition methodDefinition, Code code = Code.Call)
 		{
-			if(isCallvirt && methodDefinition.IsVirtual) {
+			if(code == Code.Callvirt && methodDefinition.IsVirtual) {
 				var parameterStack = new Stack<object> ();
 				for (var i = 0; i < methodDefinition.Parameters.Count; i++)
 					parameterStack.Push (stack.Pop ());
@@ -380,24 +383,26 @@ namespace ILCore {
 			if (!methodDefinition.IsStatic && methodDefinition.IsConstructor) {
 				var ctorType = methodDefinition.DeclaringType;
 				
-				if(stack.Count > 0 && stack.Peek() is ILObject) {
-					(stack.Peek () as ILObject).SetValue("base." + ctorType.FullName, ctorType);
-				}
-				else {
+				if(code == Code.Newobj) {
 					var obj = new ILObject {
 						type = ctorType
 					};
 
 					stack.Push (obj);
 					
-					for (var i = 0; i < ctorType.Fields.Count; i++) {
-						var field = ctorType.Fields [i];
-						var fieldType = field.FieldType;
-						if (fieldType is TypeDefinition || !fieldType.IsValueType)
-							continue;
+					while (ctorType != null) {
 
-						var type = GetType (fieldType, methodDefinition);
-						obj.SetValue(field.DeclaringType.FullName + "::" + field.Name, Activator.CreateInstance (type));
+						for (var i = 0; i < ctorType.Fields.Count; i++) {
+							var field = ctorType.Fields [i];
+							var fieldType = field.FieldType;
+							if (fieldType is TypeDefinition || !fieldType.IsValueType)
+								continue;
+
+							var type = GetType (fieldType, methodDefinition);
+							obj.SetValue (field.DeclaringType.FullName + "::" + field.Name, Activator.CreateInstance (type));
+						}
+
+						ctorType = ctorType.BaseType as TypeDefinition;
 					}
 				}
 			}
@@ -910,7 +915,7 @@ namespace ILCore {
 			case Code.Call:
 			case Code.Callvirt:
 				if (instruction.Operand is MethodDefinition) {
-					Execute (instruction.Operand as MethodDefinition, instruction.OpCode.Code == Code.Callvirt);
+					Execute (instruction.Operand as MethodDefinition, instruction.OpCode.Code);
 					break;
 				}
 
@@ -942,7 +947,7 @@ namespace ILCore {
 				if (instruction.Operand is MethodDefinition) {
 					var ctor = instruction.Operand as MethodDefinition;
 					
-					Execute (ctor);//构造函数
+					Execute (ctor, instruction.OpCode.Code);//构造函数
 
 					//var ctorType = ctor.DeclaringType;
 					//while(ctorType != null) {
