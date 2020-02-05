@@ -282,6 +282,30 @@ namespace ILCore {
 				case "Boolean":
 					value = Convert.ToBoolean (value);
 					break;
+
+				case "Int16":
+					value = Convert.ToInt16 (value);
+					break;
+
+				case "UInt16":
+					value = Convert.ToUInt16 (value);
+					break;
+
+				case "Int32":
+					value = Convert.ToInt32 (value);
+					break;
+
+				case "UInt32":
+					value = Convert.ToUInt32 (value);
+					break;
+
+				case "Int64":
+					value = Convert.ToInt64 (value);
+					break;
+
+				case "UInt64":
+					value = Convert.ToUInt64 (value);
+					break;
 				}
 
 				objects [parameters.Count - 1 - i] = value;
@@ -675,12 +699,42 @@ namespace ILCore {
 				}
 				break;
 
-			//case Code.Shl:
-			//case Code.Shr:
-			//case Code.Shr_Un:
-			//case Code.Neg:
-			//case Code.Not:
+			//将整数值左移（用零填充）指定的位数，并将结果推送到计算堆栈上。
+			case Code.Shl: {
+					var b = stack.Pop ();
+					var a = stack.Pop ();
+					
+					stack.Push (Convert.ToInt64(a) << Convert.ToInt32(b));
+				}
+				break;
 
+			//将整数值右移（保留符号）指定的位数，并将结果推送到计算堆栈上。
+			case Code.Shr: {
+					var b = stack.Pop ();
+					var a = stack.Pop ();
+
+					stack.Push (Convert.ToInt64 (a) >> Convert.ToInt32 (b));
+				}
+				break;
+
+			//将无符号整数值右移（用零填充）指定的位数，并将结果推送到计算堆栈上。
+			case Code.Shr_Un: {
+					var b = stack.Pop ();
+					var a = stack.Pop ();
+
+					stack.Push (Convert.ToUInt64 (a) >> Convert.ToInt32 (b));
+				}
+				break;
+
+			//对一个值执行求反并将结果推送到计算堆栈上。
+			case Code.Neg:
+				stack.Push (-Convert.ToInt64 (stack.Pop ()));
+				break;
+
+			//计算堆栈顶部整数值的按位求补并将结果作为相同的类型推送到计算堆栈上。
+			case Code.Not:
+				stack.Push (~Convert.ToInt64(stack.Pop ()));
+				break;
 			#endregion
 
 			#region 比较结果
