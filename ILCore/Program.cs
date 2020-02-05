@@ -384,9 +384,21 @@ namespace ILCore {
 					(stack.Peek () as ILObject).SetValue("base." + ctorType.FullName, ctorType);
 				}
 				else {
-					stack.Push (new ILObject {
+					var obj = new ILObject {
 						type = ctorType
-					});
+					};
+
+					stack.Push (obj);
+					
+					for (var i = 0; i < ctorType.Fields.Count; i++) {
+						var field = ctorType.Fields [i];
+						var fieldType = field.FieldType;
+						if (fieldType is TypeDefinition || !fieldType.IsValueType)
+							continue;
+
+						var type = GetType (fieldType, methodDefinition);
+						obj.SetValue(field.DeclaringType.FullName + "::" + field.Name, Activator.CreateInstance (type));
+					}
 				}
 			}
 
