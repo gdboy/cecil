@@ -207,6 +207,15 @@ namespace ILCore {
 
 		static long Compare (object a, object b)
 		{
+			if (a == null && b == null)
+				return 0;
+
+			if (a == null && b != null)
+				return -1;
+
+			if (a != null && b == null)
+				return 1;
+
 			if (a is double || b is double || a is float || b is float) {
 				var result = Convert.ToDouble (a) - Convert.ToDouble (b);
 				return Convert.ToInt32 (result);
@@ -690,7 +699,7 @@ namespace ILCore {
 					var b = stack.Pop ();
 					var a = stack.Pop ();
 
-					stack.Push (Convert.ToDouble (a) > Convert.ToDouble (b) ? 1 : 0);
+					stack.Push (Compare(a, b) > 0 ? 1 : 0);
 				}
 				break;
 
@@ -700,7 +709,7 @@ namespace ILCore {
 					var b = stack.Pop ();
 					var a = stack.Pop ();
 
-					stack.Push (Convert.ToDouble (a) < Convert.ToDouble (b) ? 1 : 0);
+					stack.Push (Compare(a, b) < 0 ? 1 : 0);
 				}
 				break;
 #endregion
