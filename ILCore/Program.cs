@@ -257,7 +257,7 @@ namespace ILCore {
 			}
 		}
 
-		static void Execute (MethodReference methodReference)
+		static void Execute (MethodReference methodReference, Code code = Code.Call)
 		{
 			switch(methodReference.FullName) {
 			case "System.Void System.Object::.ctor()":
@@ -324,7 +324,10 @@ namespace ILCore {
 				} else {
 					var classType = GetType (methodReference.DeclaringType, methodReference);
 					var instance = Activator.CreateInstance (classType, objects);
-					stack.Push (instance);
+					if (code == Code.Newobj)
+						stack.Push (instance);
+					else
+						(stack.Peek () as ILObject).baseInstance = instance;
 				}
 				return;
 			}
@@ -399,7 +402,7 @@ namespace ILCore {
 								continue;
 
 							var type = GetType (fieldType, methodDefinition);
-							obj.SetValue (field.DeclaringType.FullName + "::" + field.Name, Activator.CreateInstance (type));
+							obj.SetValue (field, Activator.CreateInstance (type));
 						}
 
 						ctorType = ctorType.BaseType as TypeDefinition;
@@ -423,7 +426,7 @@ namespace ILCore {
 			}
 
 			if (methodDefinition.HasBody) {
-				var nextInstruction = methodDefinition.Body.Instructions [0]; ;
+				var nextInstruction = methodDefinition.Body.Instructions [0];
 
 				ExceptionHandler finallyHandler = null;
 
@@ -945,20 +948,12 @@ namespace ILCore {
 			//创建一个值类型的新对象或新实例，并将对象引用（O 类型）推送到计算堆栈上。
 			case Code.Newobj:
 				if (instruction.Operand is MethodDefinition) {
-					var ctor = instruction.Operand as MethodDefinition;
-					
-					Execute (ctor, instruction.OpCode.Code);//构造函数
-
-					//var ctorType = ctor.DeclaringType;
-					//while(ctorType != null) {
-					//	ctorType = ctorType.BaseType as TypeDefinition;
-					//}
-
+					Execute (instruction.Operand as MethodDefinition, instruction.OpCode.Code);//构造函数
 					break;
 				}
 
 				if (instruction.Operand is MethodReference) {
-					Execute (instruction.Operand as MethodReference);//构造函数
+					Execute (instruction.Operand as MethodReference, instruction.OpCode.Code);//构造函数
 					break;
 				}
 
@@ -1008,7 +1003,7 @@ namespace ILCore {
 					var value = stack.Pop ();
 					var obj = stack.Pop ();
 					if(obj is ILObject)
-						(obj as ILObject).SetValue(fieldReference.DeclaringType + "::" + fieldReference.Name, value);
+						(obj as ILObject).SetValue(fieldReference, value);
 					else
 						obj.SetFieldValue (fieldReference.Name, value);
 				}
@@ -1021,7 +1016,7 @@ namespace ILCore {
 					var obj = stack.Pop ();
 					object value = null;
 					if (obj is ILObject)
-						value = (obj as ILObject).GetValue (fieldReference.DeclaringType + "::" + fieldReference.Name);
+						value = (obj as ILObject).GetValue (fieldReference);
 					else
 						value = obj.GetFieldValue (fieldReference.Name);
 					stack.Push (value);

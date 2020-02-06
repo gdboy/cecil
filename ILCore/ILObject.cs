@@ -5,19 +5,30 @@ using System.Collections.Generic;
 
 namespace ILCore {
 	class ILObject {
-		public TypeDefinition type;
+		public TypeDefinition type;//内部定义类型
+		public object baseInstance;//继承外部引用类型
 		private Dictionary<string, object> fields = new Dictionary<string, object> ();
 		private Dictionary<string, MethodDefinition> methods = new Dictionary<string, MethodDefinition> ();
 
-		public void SetValue (string key, object value)
+		public void SetValue (FieldReference fieldReference, object value)
 		{
-			fields [key] = value;
+			if(fieldReference is FieldDefinition) {
+				var key = fieldReference.DeclaringType.FullName + "::" + fieldReference.Name;
+				fields [key] = value;
+			} else {
+				baseInstance.SetFieldValue (fieldReference.Name, value);
+			}
 		}
 
-		public object GetValue (string key)
+		public object GetValue (FieldReference fieldReference)
 		{
-			fields.TryGetValue (key, out object value);
-			return value;
+			if (fieldReference is FieldDefinition) {
+				var key = fieldReference.DeclaringType.FullName + "::" + fieldReference.Name;
+				fields.TryGetValue (key, out object value);
+				return value;
+			} else {
+				return baseInstance.GetFieldValue (fieldReference.Name);
+			}
 		}
 
 		#region 多态
