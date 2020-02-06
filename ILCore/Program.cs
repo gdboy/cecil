@@ -917,16 +917,10 @@ namespace ILCore {
 			#region 函数和委托
 			case Code.Call:
 			case Code.Callvirt:
-				if (instruction.Operand is MethodDefinition) {
+				if (instruction.Operand is MethodDefinition)
 					Execute (instruction.Operand as MethodDefinition, instruction.OpCode.Code);
-					break;
-				}
-
-				if (instruction.Operand is MethodReference) {
-					Execute (instruction.Operand as MethodReference);
-					break;
-				}
-
+				else
+					Execute (instruction.Operand as MethodReference, instruction.OpCode.Code);
 				break;
 
 			//从当前方法返回，并将返回值（如果存在）从调用方的计算堆栈推送到被调用方的计算堆栈上。
@@ -947,17 +941,11 @@ namespace ILCore {
 			#region 类和对象
 			//创建一个值类型的新对象或新实例，并将对象引用（O 类型）推送到计算堆栈上。
 			case Code.Newobj:
-				if (instruction.Operand is MethodDefinition) {
+				if (instruction.Operand is MethodDefinition)
 					Execute (instruction.Operand as MethodDefinition, instruction.OpCode.Code);//构造函数
-					break;
-				}
-
-				if (instruction.Operand is MethodReference) {
+				else
 					Execute (instruction.Operand as MethodReference, instruction.OpCode.Code);//构造函数
-					break;
-				}
-
-				throw new NotSupportedException ("Not supported " + instruction);
+				break;
 				
 			//将位于指定地址的值类型的每个字段初始化为空引用或适当的基元类型的 0。
 			case Code.Initobj:{
