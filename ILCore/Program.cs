@@ -11,7 +11,7 @@ using System.Reflection;
 
 namespace ILCore {
 
-	class Program {
+	class Interpreter {
 		static Stack<object> stack = new Stack<object> ();
 		static object [] localVars = null;//局部变量
 		static Stack<object []> localVarsStack = new Stack<object []> ();//局部变量栈
@@ -208,6 +208,58 @@ namespace ILCore {
 			return types;
 		}
 
+		static object[] PopParameters(MethodReference methodReference)
+		{
+			var parameters = methodReference.Parameters;
+
+			var objects = new object [parameters.Count];
+
+			for (var i = 0; i < parameters.Count; i++) {
+
+				var value = stack.Pop ();
+
+				switch (GetType (parameters [i].ParameterType, methodReference).Name) {
+				case "Boolean":
+					value = Convert.ToBoolean (value);
+					break;
+
+				case "Int16":
+					value = Convert.ToInt16 (value);
+					break;
+
+				case "UInt16":
+					value = Convert.ToUInt16 (value);
+					break;
+
+				case "Int32":
+					value = Convert.ToInt32 (value);
+					break;
+
+				case "UInt32":
+					value = Convert.ToUInt32 (value);
+					break;
+
+				case "Int64":
+					value = Convert.ToInt64 (value);
+					break;
+
+				case "UInt64":
+					value = Convert.ToUInt64 (value);
+					break;
+				}
+
+				objects [parameters.Count - 1 - i] = value;
+			}
+
+			return objects;
+		}
+
+		public static void PushParameters (object[] objects)
+		{
+			for (var i = 0; i < objects.Length; i++)
+				stack.Push (objects [objects.Length - 1 - i]);
+		}
+
 		static long Compare (object a, object b)
 		{
 			if (a == null && b == null)
@@ -229,9 +281,6 @@ namespace ILCore {
 
 		static void Main (string [] args)
 		{
-			foreach (var item in new int [] { 1, 3, 2, 5, 4 }.ToList ())
-				Console.WriteLine (item);
-
 			Assembly.LoadFrom (@"F:\workspace\GameCenter\UnityAssemblies\UnityEngine.CoreModule.dll");
 			Assembly.LoadFrom (@"F:\workspace\cecil\ExampleDLL2\bin\Debug\ExampleDLL2.dll");
 
@@ -271,48 +320,23 @@ namespace ILCore {
 					Buffer.BlockCopy (bytes, 0, array, 0, bytes.Length);
 				}
 				return;
-			}
-			
-			var parameters = methodReference.Parameters;
 
-			var objects = new object [parameters.Count];
-
-			for (var i = 0; i < parameters.Count; i++) {
-
-				var value = stack.Pop ();
-
-				switch (GetType(parameters[i].ParameterType, methodReference).Name) {
-				case "Boolean":
-					value = Convert.ToBoolean (value);
-					break;
-
-				case "Int16":
-					value = Convert.ToInt16 (value);
-					break;
-
-				case "UInt16":
-					value = Convert.ToUInt16 (value);
-					break;
-
-				case "Int32":
-					value = Convert.ToInt32 (value);
-					break;
-
-				case "UInt32":
-					value = Convert.ToUInt32 (value);
-					break;
-
-				case "Int64":
-					value = Convert.ToInt64 (value);
-					break;
-
-				case "UInt64":
-					value = Convert.ToUInt64 (value);
-					break;
+			case "System.Delegate System.Delegate::Combine(System.Delegate,System.Delegate)": {
+					var b = stack.Pop () as DelegateHandler;
+					var a = stack.Pop () as DelegateHandler;
+					stack.Push (a + b);
 				}
+				return;
 
-				objects [parameters.Count - 1 - i] = value;
+			case "System.Delegate System.Delegate::Remove(System.Delegate,System.Delegate)": {
+					var b = stack.Pop () as DelegateHandler;
+					var a = stack.Pop () as DelegateHandler;
+					stack.Push (a - b);
+				}
+				return;
 			}
+
+			var objects = PopParameters (methodReference);
 
 			if (methodReference.Name == ".ctor") {
 				if (methodReference.IsGenericInstance) {
@@ -345,9 +369,27 @@ namespace ILCore {
 				stack.Push (resultValue);
 		}
 
-		static void Execute (MethodDefinition methodDefinition, Code code = Code.Call)
+		public static void Execute (MethodDefinition methodDefinition, Code code = Code.Call)
 		{
-			if(code == Code.Callvirt && methodDefinition.IsVirtual) {
+			if(!methodDefinition.HasBody) {
+				//methodDefinition.DeclaringType.BaseType.FullName == typeof(MulticastDelegate).FullName
+				var objects = PopParameters (methodDefinition);
+
+				switch (methodDefinition.Name) {
+				case ".ctor":
+					stack.Push (new DelegateHandler (objects [1] as MethodDefinition));
+					break;
+
+				case "Invoke":
+					var delegateHandler = stack.Pop () as DelegateHandler;
+					PushParameters (objects);
+					delegateHandler.Invoke (objects);
+					break;
+				}
+				return;
+			}
+
+			if (code == Code.Callvirt && methodDefinition.IsVirtual) {
 				var parameterStack = new Stack<object> ();
 				for (var i = 0; i < methodDefinition.Parameters.Count; i++)
 					parameterStack.Push (stack.Pop ());
@@ -357,8 +399,6 @@ namespace ILCore {
 				for (var i = 0; i < methodDefinition.Parameters.Count; i++)
 					stack.Push (parameterStack.Pop ());
 			}
-
-			//Console.WriteLine (methodDefinition);
 
 			if (!staticFields.ContainsKey (methodDefinition.DeclaringType)) {
 				var dictionary = new Dictionary<string, object> ();
@@ -383,16 +423,19 @@ namespace ILCore {
 				localArgs [localArgs.Length - 1 - i] = stack.Pop ();
 			}
 
+			localVarsStack.Push (localVars);
+			localVars = new object [methodDefinition.Body.Variables.Count];
+			
 			if (!methodDefinition.IsStatic && methodDefinition.IsConstructor) {
 				var ctorType = methodDefinition.DeclaringType;
-				
-				if(code == Code.Newobj) {
+
+				if (code == Code.Newobj) {
 					var obj = new ILObject {
 						type = ctorType
 					};
 
 					stack.Push (obj);
-					
+
 					while (ctorType != null) {
 
 						for (var i = 0; i < ctorType.Fields.Count; i++) {
@@ -413,10 +456,7 @@ namespace ILCore {
 			if (methodDefinition.HasThis)
 				localArgs [0] = stack.Pop ();
 
-			localVarsStack.Push (localVars);
-			localVars = new object [methodDefinition.Body.Variables.Count];
-
-			for(var i=0;i<methodDefinition.Body.Variables.Count;i++) {
+			for (var i = 0; i < methodDefinition.Body.Variables.Count; i++) {
 				var variableType = methodDefinition.Body.Variables [i].VariableType;
 				if (variableType is TypeDefinition || !variableType.IsValueType)
 					continue;
@@ -425,56 +465,44 @@ namespace ILCore {
 				localVars [i] = Activator.CreateInstance (type);
 			}
 
-			if (methodDefinition.HasBody) {
-				var nextInstruction = methodDefinition.Body.Instructions [0];
+			var nextInstruction = methodDefinition.Body.Instructions [0];
 
-				ExceptionHandler finallyHandler = null;
+			ExceptionHandler finallyHandler = null;
 
-				do {
-					//try {
-						nextInstruction = Execute (nextInstruction, methodDefinition);
+			do {
+				//try {
+					nextInstruction = Execute (nextInstruction, methodDefinition);
 
-						if (finallyHandler != null && nextInstruction == null) {
-							nextInstruction = finallyHandler.HandlerStart;
-							finallyHandler = null;
-						}
-					//}
-					//catch (Exception e) {
+					if (finallyHandler != null && nextInstruction == null) {
+						nextInstruction = finallyHandler.HandlerStart;
+						finallyHandler = null;
+					}
+				//}
+				//catch (Exception e) {
 
-					//	var exceptionHandlers = methodDefinition.Body.ExceptionHandlers;
+				//	var exceptionHandlers = methodDefinition.Body.ExceptionHandlers;
 
-					//	if (exceptionHandlers == null || exceptionHandlers.Count == 0) {
-					//		Console.WriteLine (e);
-					//		break;
-					//	}
+				//	if (exceptionHandlers == null || exceptionHandlers.Count == 0) {
+				//		Console.WriteLine (e);
+				//		break;
+				//	}
 
-					//	foreach (var exceptionHandler in exceptionHandlers) {
+				//	foreach (var exceptionHandler in exceptionHandlers) {
 
-					//		if (exceptionHandler.HandlerType == ExceptionHandlerType.Catch && GetType (exceptionHandler.CatchType).IsAssignableFrom (e.GetType ())) {
-					//			stack.Push (e);
-					//			instruction = exceptionHandler.HandlerStart;
-					//			break;
-					//		}
-					//	}
+				//		if (exceptionHandler.HandlerType == ExceptionHandlerType.Catch && GetType (exceptionHandler.CatchType).IsAssignableFrom (e.GetType ())) {
+				//			stack.Push (e);
+				//			instruction = exceptionHandler.HandlerStart;
+				//			break;
+				//		}
+				//	}
 
-					//	var lastExceptionHandler = exceptionHandlers [exceptionHandlers.Count - 1];
+				//	var lastExceptionHandler = exceptionHandlers [exceptionHandlers.Count - 1];
 
-					//	if (lastExceptionHandler.HandlerType == ExceptionHandlerType.Finally)
-					//		finallyHandler = lastExceptionHandler;
-					//}
-				} while (nextInstruction != null);
-			} else {//委托
-				switch (methodDefinition.Name) {
-				case ".ctor":
-					stack.Push (localArgs [localArgs.Length - 1]);
-					break;
-
-				case "Invoke":
-					stack.Push (localArgs [0]);
-					Execute (localArgs [1] as MethodDefinition);
-					break;
-				}
-			}
+				//	if (lastExceptionHandler.HandlerType == ExceptionHandlerType.Finally)
+				//		finallyHandler = lastExceptionHandler;
+				//}
+			} while (nextInstruction != null);
+			
 
 			localArgs = localArgsStack.Pop ();
 
