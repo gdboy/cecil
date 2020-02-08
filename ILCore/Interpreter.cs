@@ -1,4 +1,4 @@
-﻿#define ILCORE_DEBUG
+﻿//#define ILCORE_DEBUG
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -11,19 +11,15 @@ using System.Reflection;
 
 namespace ILCore {
 
-	class Interpreter {
-		static Stack<object> stack = new Stack<object> ();
+	public class Interpreter {
+		public static readonly Stack<object> stack = new Stack<object> ();
 		static object [] localVars = null;//局部变量
 		static Stack<object []> localVarsStack = new Stack<object []> ();//局部变量栈
 		static object [] localArgs = null;//函数参数
 		static Stack<object []> localArgsStack = new Stack<object []> ();//函数参数栈
 
 		static Dictionary<TypeReference, Dictionary<string, object>> staticFields = new Dictionary<TypeReference, Dictionary<string, object>> ();//静态字段
-
-#if ILCORE_DEBUG
-		static List<KeyValuePair<Instruction, Stack<object>>> stackInfo = new List<KeyValuePair<Instruction, Stack<object>>>();//每条指令执行时的栈信息
-#endif
-
+		
 		static Type GetType (string typeName)
 		{
 			var type = Type.GetType (typeName);
@@ -257,7 +253,7 @@ namespace ILCore {
 		public static void PushParameters (object[] objects)
 		{
 			for (var i = 0; i < objects.Length; i++)
-				stack.Push (objects [objects.Length - 1 - i]);
+				stack.Push (objects [i]);
 		}
 
 		static long Compare (object a, object b)
@@ -279,38 +275,11 @@ namespace ILCore {
 			return Convert.ToInt64 (a) - Convert.ToInt64 (b);
 		}
 
-		static void Main (string [] args)
-		{
-			Assembly.LoadFrom (@"F:\workspace\GameCenter\UnityAssemblies\UnityEngine.CoreModule.dll");
-			Assembly.LoadFrom (@"F:\workspace\cecil\ExampleDLL2\bin\Debug\ExampleDLL2.dll");
-
-#if DEBUG
-			var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Debug/ExampleDll.dll");
-#else
-			var module = ModuleDefinition.ReadModule ("../../../ExampleDll/bin/Release/ExampleDll.dll");
-#endif
-			foreach (var type in module.Types) {
-
-				foreach (var methodDefinition in type.Methods) {
-
-					if (methodDefinition.IsStatic && methodDefinition.Name == "Main") {
-
-						foreach (var p in methodDefinition.Parameters)
-							stack.Push (null);
-
-						Execute (methodDefinition);
-
-						break;
-					}
-				}
-			}
-		}
-
-		static void Execute (MethodReference methodReference, Code code = Code.Call)
+		static object Execute (MethodReference methodReference, Code code = Code.Call)
 		{
 			switch(methodReference.FullName) {
 			case "System.Void System.Object::.ctor()":
-				return;
+				return null;
 
 			case "System.Void System.Runtime.CompilerServices.RuntimeHelpers::InitializeArray(System.Array,System.RuntimeFieldHandle)":
 				{
@@ -319,21 +288,21 @@ namespace ILCore {
 
 					Buffer.BlockCopy (bytes, 0, array, 0, bytes.Length);
 				}
-				return;
+				return null;
 
 			case "System.Delegate System.Delegate::Combine(System.Delegate,System.Delegate)": {
 					var b = stack.Pop () as DelegateHandler;
 					var a = stack.Pop () as DelegateHandler;
 					stack.Push (a + b);
 				}
-				return;
+				return stack.Peek();
 
 			case "System.Delegate System.Delegate::Remove(System.Delegate,System.Delegate)": {
 					var b = stack.Pop () as DelegateHandler;
 					var a = stack.Pop () as DelegateHandler;
 					stack.Push (a - b);
 				}
-				return;
+				return stack.Peek();
 			}
 
 			var objects = PopParameters (methodReference);
@@ -353,7 +322,8 @@ namespace ILCore {
 					else
 						(stack.Peek () as ILObject).baseInstance = instance;
 				}
-				return;
+
+				return stack.Peek();
 			}
 
 			object obj = null;
@@ -365,11 +335,15 @@ namespace ILCore {
 
 			var resultValue = method.Invoke (obj, objects);
 
-			if (method.ReturnType.FullName != "System.Void")
+			if (method.ReturnType.FullName != "System.Void") {
 				stack.Push (resultValue);
+				return resultValue;
+			}
+
+			return null;
 		}
 
-		public static void Execute (MethodDefinition methodDefinition, Code code = Code.Call)
+		public static object Execute (MethodDefinition methodDefinition, Code code = Code.Call)
 		{
 			if(!methodDefinition.HasBody) {
 				//methodDefinition.DeclaringType.BaseType.FullName == typeof(MulticastDelegate).FullName
@@ -382,11 +356,14 @@ namespace ILCore {
 
 				case "Invoke":
 					var delegateHandler = stack.Pop () as DelegateHandler;
-					PushParameters (objects);
 					delegateHandler.Invoke (objects);
 					break;
 				}
-				return;
+
+				if (methodDefinition.ReturnType.FullName != typeof (void).FullName)
+					return stack.Peek ();
+
+				return null;
 			}
 
 			if (code == Code.Callvirt && methodDefinition.IsVirtual) {
@@ -507,6 +484,11 @@ namespace ILCore {
 			localArgs = localArgsStack.Pop ();
 
 			localVars = localVarsStack.Pop ();
+
+			if (methodDefinition.ReturnType.FullName != typeof (void).FullName)
+				return stack.Peek ();
+
+			return null;
 		}
 
 		static Instruction Execute (Instruction instruction, MethodDefinition methodDefinition)
@@ -514,7 +496,6 @@ namespace ILCore {
 			
 #if ILCORE_DEBUG
 			Console.WriteLine (instruction);
-			stackInfo.Add (new KeyValuePair<Instruction, Stack<object>> (instruction, new Stack<object> (stack)));
 #endif
 
 			var next = instruction.Next;
