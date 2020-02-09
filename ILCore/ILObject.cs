@@ -105,6 +105,20 @@ namespace ILCore {
 			return null;
 		}
 
+		public static object InvokeMethod (string typeName, string methodName, params object [] objects)
+		{
+			var type = types [typeName];
+
+			foreach (var method in type.Methods) {
+				if (method.Name.IndexOf (methodName) != -1) {
+					Interpreter.PushParameters (objects);
+					return Interpreter.Execute (method);
+				}
+			}
+
+			return null;
+		}
+
 		public override string ToString ()
 		{
 			return type.FullName;
