@@ -360,7 +360,7 @@ namespace ILCore {
 					break;
 				}
 
-				if (methodDefinition.ReturnType.FullName != typeof (void).FullName)
+				if (!methodDefinition.IsStatic && methodDefinition.IsConstructor || methodDefinition.ReturnType.FullName != typeof (void).FullName)
 					return stack.Peek ();
 
 				return null;
@@ -485,7 +485,7 @@ namespace ILCore {
 
 			localVars = localVarsStack.Pop ();
 
-			if (methodDefinition.ReturnType.FullName != typeof (void).FullName)
+			if (!methodDefinition.IsStatic && methodDefinition.IsConstructor || methodDefinition.ReturnType.FullName != typeof (void).FullName)
 				return stack.Peek ();
 
 			return null;

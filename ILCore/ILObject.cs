@@ -11,7 +11,7 @@ namespace ILCore {
 		private Dictionary<string, object> fields = new Dictionary<string, object> ();
 		//private Dictionary<string, MethodDefinition> methods = new Dictionary<string, MethodDefinition> ();
 
-		static Dictionary<string, TypeDefinition> types = new Dictionary<string, TypeDefinition> ();
+		private static Dictionary<string, TypeDefinition> types = new Dictionary<string, TypeDefinition> ();
 
 		public static void LoadAssembly (string path)
 		{
@@ -92,11 +92,12 @@ namespace ILCore {
 
 		public object InvokeMethod(string methodName, params object[] objects)
 		{
-			Interpreter.stack.Push (this);
-			Interpreter.PushParameters (objects);
-
 			foreach (var method in type.Methods) {
 				if (method.Name.IndexOf(methodName) != -1) {
+					if(method.HasThis)
+						Interpreter.stack.Push (this);
+
+					Interpreter.PushParameters (objects);
 					return Interpreter.Execute (method);
 				}
 			}
