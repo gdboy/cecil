@@ -9,10 +9,9 @@ namespace ILCore {
 		public TypeDefinition type;//内部定义类型
 		public object baseInstance;//继承外部引用类型
 		private Dictionary<string, object> fields = new Dictionary<string, object> ();
-		//private Dictionary<string, MethodDefinition> methods = new Dictionary<string, MethodDefinition> ();
-
 		private static Dictionary<string, TypeDefinition> types = new Dictionary<string, TypeDefinition> ();
-
+		private static Dictionary<string, Dictionary<string, MethodDefinition>> methods = new Dictionary<string, Dictionary<string, MethodDefinition>>();
+		
 		public static void LoadAssembly (string path)
 		{
 			var module = ModuleDefinition.ReadModule (path);
@@ -23,35 +22,17 @@ namespace ILCore {
 					continue;
 
 				types [type.FullName] = type;
-
-				//foreach (var methodDefinition in type.Methods) {
-
-				//	if (methodDefinition.IsStatic && methodDefinition.Name == "Main") {
-
-				//		foreach (var p in methodDefinition.Parameters)
-				//			Interpreter.stack.Push (null);
-
-				//		Interpreter.Execute (methodDefinition);
-
-				//		break;
-				//	}
-				//}
 			}
 		}
 
 		public static ILObject CreateInstance (string typeName, params object[] objects)
 		{
-			var type = types [typeName];
+			return CreateInstance(typeName, ".ctor", objects);
+		}
 
-			Interpreter.PushParameters (objects);
-
-			foreach(var method in type.Methods) {
-				if(!method.IsStatic && method.IsConstructor) {
-					return Interpreter.Execute (method, Code.Newobj) as ILObject;
-				}
-			}
-
-			return null;
+		public static ILObject CreateInstance (string typeName, string methodName, params object [] objects)
+		{
+			return Execute (typeName, methodName, Code.Newobj, objects) as ILObject;
 		}
 
 		public void SetValue (FieldReference fieldReference, object value)
@@ -90,33 +71,66 @@ namespace ILCore {
 			return methodDefinition;
 		}
 
-		public object InvokeMethod(string methodName, params object[] objects)
+		private static Dictionary<string, MethodDefinition> GetMethodDictionary (string typeName)
 		{
-			foreach (var method in type.Methods) {
-				if (method.Name.IndexOf(methodName) != -1) {
-					if(method.HasThis)
-						Interpreter.stack.Push (this);
+			var type = types [typeName];
 
-					Interpreter.PushParameters (objects);
-					return Interpreter.Execute (method);
+			if (!methods.TryGetValue (typeName, out Dictionary<string, MethodDefinition> methodDictionary)) {
+
+				methods [typeName] = methodDictionary = new Dictionary<string, MethodDefinition> ();
+
+				foreach (var method in type.Methods) {
+					var methodName = method.FullName.Substring (method.FullName.IndexOf ("::") + 2);
+
+					methodDictionary [methodName] = method;
 				}
 			}
 
-			return null;
+			return methodDictionary;
+		}
+
+		public static List<string> GetMethods(string typeName)
+		{
+			var methodDictionary = GetMethodDictionary(typeName);
+
+			var methodList = new List<string>(methodDictionary.Count);
+
+			foreach (var item in methodDictionary)
+				methodList.Add (item.Key);
+
+			return methodList;
+		}
+
+		public object InvokeMethod(string methodName, params object[] objects)
+		{
+			return Execute (type.FullName, methodName, Code.Callvirt, objects);
 		}
 
 		public static object InvokeMethod (string typeName, string methodName, params object [] objects)
 		{
-			var type = types [typeName];
+			return Execute (typeName, methodName, Code.Call, objects);
+		}
 
-			foreach (var method in type.Methods) {
-				if (method.Name.IndexOf (methodName) != -1) {
-					Interpreter.PushParameters (objects);
-					return Interpreter.Execute (method);
-				}
+		private static object Execute(string typeName, string methodName, Code code, object[] objects)
+		{
+			Interpreter.PushParameters (objects);
+
+			var methodDictionary = GetMethodDictionary (typeName);
+
+			if (methodDictionary.TryGetValue (methodName, out MethodDefinition methodDefinition))
+				return Interpreter.Execute (methodDefinition, code);
+
+			var parameters = "";
+
+			for (var i = 0; i < objects.Length; i++) {
+				parameters += objects [i].GetType ().FullName;
+				if (i != objects.Length - 1)
+					parameters += ",";
 			}
 
-			return null;
+			methodDictionary.TryGetValue (methodName + "(" + parameters + ")", out methodDefinition);
+			
+			return Interpreter.Execute (methodDefinition, code);
 		}
 
 		public override string ToString ()
