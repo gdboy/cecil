@@ -1,11 +1,13 @@
 ﻿//#define ILCORE_DEBUG
 
+using GameCenter.ExtensionMethods;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using UnityEngine;
 
 //指令大全 https://docs.microsoft.com/zh-cn/dotnet/api/system.reflection.emit.opcodes?view=netframework-4.8
 
@@ -110,19 +112,24 @@ namespace ILCore {
 
 			var typeName = typeReference.FullName;
 
-			if (typeReference.IsGenericParameter) {
-				var genericArguments = ((GenericInstanceType)methodReference.DeclaringType).GenericArguments;
-				for (var i = 0; i < genericArguments.Count; i++) {
-					typeName = typeName.Replace ("!" + i, genericArguments [i].FullName);
-				}
-			}
+            if(methodReference != null)
+            {
+                if (typeReference.IsGenericParameter || methodReference.DeclaringType.IsGenericInstance) {
+				    var genericArguments = ((GenericInstanceType)methodReference.DeclaringType).GenericArguments;
+				    for (var i = 0; i < genericArguments.Count; i++) {
+					    typeName = typeName.Replace ("!" + i, genericArguments [i].FullName);
+				    }
+			    }
 
-			if (methodReference != null && methodReference.IsGenericInstance) {
-				var genericArguments = ((GenericInstanceMethod)methodReference).GenericArguments;
-				for (var i = 0; i < genericArguments.Count; i++) {
-					typeName = typeName.Replace ("!!" + i, genericArguments [i].FullName);
-				}
-			}
+			    if (methodReference.IsGenericInstance) {
+				    var genericArguments = ((GenericInstanceMethod)methodReference).GenericArguments;
+				    for (var i = 0; i < genericArguments.Count; i++) {
+					    typeName = typeName.Replace ("!!" + i, genericArguments [i].FullName);
+				    }
+			    }
+            }
+
+			
 
 			if (typeReference.IsGenericInstance || typeReference.IsArray)
 				typeName = ConvertTypeName (typeName);
@@ -132,50 +139,28 @@ namespace ILCore {
 
 		static MethodInfo GetMethod (MethodReference methodReference)
 		{
-			if(!methodReference.ContainsGenericParameter) {
+            var classType = GetType(methodReference.DeclaringType, methodReference);
 
-				var classType = GetType (methodReference.DeclaringType);
+            if (!methodReference.ContainsGenericParameter) {
 
 				var types = GetParameters(methodReference);
 
 				return classType.GetMethod (methodReference.Name, types);
 			}
+            else
+            {
+                var genericArguments = GetGenericArguments(methodReference);
+                var parameters = GetParameters(methodReference);
 
-			var methods = GetType (methodReference.DeclaringType, methodReference).GetMethods (BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                var method = classType.GetGenericMethod(methodReference.Name, parameters);
+                if (genericArguments == null)
+                    return method;
 
-			foreach (var method in methods) {
-				if (method.Name != methodReference.Name || method.IsGenericMethod != methodReference.IsGenericInstance)
-					continue;
-
-				var parameters = method.GetParameters ();
-				if (parameters.Length != methodReference.Parameters.Count)
-					continue;
-
-				var find = true;
-
-				for(var i = 0; i < parameters.Length; i++) {
-					var type = GetType (methodReference.Parameters [i].ParameterType, methodReference);
-					if (parameters [i].ParameterType.FullName != null && parameters [i].ParameterType.Name != type.Name) {
-						find = false;
-						break;
-					}
-				}
-
-				if (!find)
-					continue;
-
-				if (!method.ContainsGenericParameters)
-					return method;
-
-				var types = GetGenericArguments (methodReference);
-
-				return method.MakeGenericMethod (types);
-			}
-
-			return null;
+                return method.MakeGenericMethod(genericArguments);
+            }
 		}
-		
-		static Type[] GetGenericArguments(MethodReference methodReference)
+
+        static Type[] GetGenericArguments(MethodReference methodReference)
 		{
 			if (!methodReference.IsGenericInstance)
 				return null;
@@ -214,35 +199,43 @@ namespace ILCore {
 
 				var value = stack.Pop ();
 
-				switch (GetType (parameters [i].ParameterType, methodReference).Name) {
-				case "Boolean":
-					value = Convert.ToBoolean (value);
-					break;
+				try
+                {
+                    switch (GetType(parameters[i].ParameterType, methodReference).Name)
+                    {
+                        case "Boolean":
+                            value = Convert.ToBoolean(value);
+                            break;
 
-				case "Int16":
-					value = Convert.ToInt16 (value);
-					break;
+                        case "Int16":
+                            value = Convert.ToInt16(value);
+                            break;
 
-				case "UInt16":
-					value = Convert.ToUInt16 (value);
-					break;
+                        case "UInt16":
+                            value = Convert.ToUInt16(value);
+                            break;
 
-				case "Int32":
-					value = Convert.ToInt32 (value);
-					break;
+                        case "Int32":
+                            value = Convert.ToInt32(value);
+                            break;
 
-				case "UInt32":
-					value = Convert.ToUInt32 (value);
-					break;
+                        case "UInt32":
+                            value = Convert.ToUInt32(value);
+                            break;
 
-				case "Int64":
-					value = Convert.ToInt64 (value);
-					break;
+                        case "Int64":
+                            value = Convert.ToInt64(value);
+                            break;
 
-				case "UInt64":
-					value = Convert.ToUInt64 (value);
-					break;
-				}
+                        case "UInt64":
+                            value = Convert.ToUInt64(value);
+                            break;
+                    }
+                }
+                catch(Exception e)
+                {
+                    Debug.Log(value);
+                }
 
 				objects [parameters.Count - 1 - i] = value;
 			}
@@ -831,8 +824,18 @@ namespace ILCore {
 						next = (Instruction)instruction.Operand;
 				}
 				break;
-			//如果第一个值大于或等于第二个值，则将控制转移到目标指令。
-			case Code.Bge_S:
+            //当两个无符号整数值或未经排序的浮点值不相等时，将控制转移到目标指令。
+            case Code.Bne_Un_S:
+            case Code.Bne_Un:
+                {
+                    var b = stack.Pop();
+                    var a = stack.Pop();
+                    if (!object.Equals(a, b))
+                        next = (Instruction)instruction.Operand;
+                }
+                break;
+                //如果第一个值大于或等于第二个值，则将控制转移到目标指令。
+                case Code.Bge_S:
 			case Code.Bge:
 			case Code.Bge_Un_S:
 			case Code.Bge_Un: {
@@ -1034,8 +1037,15 @@ namespace ILCore {
 			case Code.Ldsflda: {
 					var memberReference = instruction.Operand as MemberReference;
 
-					staticFields [memberReference.DeclaringType].TryGetValue (memberReference.Name, out object value);
-					stack.Push (value); ;
+					try
+                        {
+                            staticFields[memberReference.DeclaringType].TryGetValue(memberReference.Name, out object value);
+                            stack.Push(value); ;
+                        }
+                        catch(Exception e)
+                        {
+                            Debug.LogException(e);
+                        }
 				}
 				break;
 

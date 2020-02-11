@@ -1,5 +1,6 @@
 ﻿//#define ILCORE_DEBUG
 
+using GameCenter.ExtensionMethods;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using System.Collections.Generic;

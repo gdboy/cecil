@@ -4,47 +4,48 @@ using System.Reflection;
 using UnityEngine;
 #endif
 
-
-public static class AccessExtensions
+namespace GameCenter.ExtensionMethods
 {
-    public static T InvokeConstructor<T>(this Type type, Type[] paramTypes = null, object[] paramValues = null)
+    public static class AccessExtensions
     {
-        return (T)type.InvokeConstructor(paramTypes, paramValues);
-    }
-
-    public static object InvokeConstructor(this Type type, Type[] paramTypes = null, object[] paramValues = null)
-    {
-        if (paramTypes == null || paramValues == null)
+        public static T InvokeConstructor<T>(this Type type, Type[] paramTypes = null, object[] paramValues = null)
         {
-            paramTypes = new Type[] { };
-            paramValues = new object[] { };
+            return (T)type.InvokeConstructor(paramTypes, paramValues);
         }
 
-        var constructor = type.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, paramTypes, null);
-
-        return constructor.Invoke(paramValues);
-    }
-
-    public static MethodInfo GetMethod(this object o, string methodName)
-    {
-        var type = o.GetType();
-
-        MethodInfo method = null;
-
-        try
+        public static object InvokeConstructor(this Type type, Type[] paramTypes = null, object[] paramValues = null)
         {
-            do
+            if (paramTypes == null || paramValues == null)
             {
-                method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                paramTypes = new Type[] { };
+                paramValues = new object[] { };
+            }
 
-                if (method != null)
-                    break;
+            var constructor = type.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, paramTypes, null);
 
-                type = type.BaseType;
-            } while (type != null);
+            return constructor.Invoke(paramValues);
         }
-        catch (Exception e)
+
+        public static MethodInfo GetMethod(this object o, string methodName)
         {
+            var type = o.GetType();
+
+            MethodInfo method = null;
+
+            try
+            {
+                do
+                {
+                    method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+                    if (method != null)
+                        break;
+
+                    type = type.BaseType;
+                } while (type != null);
+            }
+            catch(Exception e)
+            {
 #if UNITY_EDITOR
             Debug.LogError(string.Format("GetMethod {0}, {1}", o, methodName));
             Debug.LogException(e);
@@ -52,90 +53,91 @@ public static class AccessExtensions
 			Console.WriteLine (string.Format ("GetMethod {0}, {1}", o, methodName));
 			Console.WriteLine (e);
 #endif
-		}
+            }
 
-        return method;
-    }
-
-    public static T Invoke<T>(this object o, string methodName, params object[] args)
-    {
-        var value = o.Invoke(methodName, args);
-        if (value != null)
-        {
-            return (T)value;
+            return method;
         }
 
-        return default(T);
-    }
-
-    public static object Invoke(this object o, string methodName, params object[] args)
-    {
-        var type = o.GetType();
-
-        var method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-
-        return method?.Invoke(o, args);
-    }
-
-    public static T GetFieldValue<T>(this object o, string name)
-    {
-        var value = o.GetFieldValue(name);
-        if (value != null)
+        public static T Invoke<T>(this object o, string methodName, params object[] args)
         {
-            return (T)value;
+            var value = o.Invoke(methodName, args);
+            if (value != null)
+            {
+                return (T)value;
+            }
+
+            return default(T);
         }
 
-        return default(T);
-    }
-
-    public static object GetFieldValue(this object o, string name)
-    {
-        var field = o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-        if (field != null)
+        public static object Invoke(this object o, string methodName, params object[] args)
         {
-            return field.GetValue(o);
+            var type = o.GetType();
+
+            var method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+            return method?.Invoke(o, args);
         }
 
-        return null;
-    }
-
-    public static void SetFieldValue(this object o, string name, object value)
-    {
-        var field = o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-        if (field != null)
+        public static T GetFieldValue<T>(this object o, string name)
         {
-            field.SetValue(o, value);
-        }
-    }
+            var value = o.GetFieldValue(name);
+            if (value != null)
+            {
+                return (T)value;
+            }
 
-    public static T GetPropertyValue<T>(this object o, string name)
-    {
-        var value = o.GetPropertyValue(name);
-        if (value != null)
-        {
-            return (T)value;
+            return default(T);
         }
 
-        return default(T);
-    }
-
-    public static object GetPropertyValue(this object o, string name)
-    {
-        var property = o.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-        if (property != null)
+        public static object GetFieldValue(this object o, string name)
         {
-            return property.GetValue(o, null);
+            var field = o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field != null)
+            {
+                return field.GetValue(o);
+            }
+
+            return null;
         }
 
-        return null;
-    }
-
-    public static void SetPropertyValue(this object o, string name, object value)
-    {
-        var property = o.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-        if (property != null)
+        public static void SetFieldValue(this object o, string name, object value)
         {
-            property.SetValue(o, value, null);
+            var field = o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field != null)
+            {
+                field.SetValue(o, value);
+            }
+        }
+
+        public static T GetPropertyValue<T>(this object o, string name)
+        {
+            var value = o.GetPropertyValue(name);
+            if (value != null)
+            {
+                return (T)value;
+            }
+
+            return default(T);
+        }
+
+        public static object GetPropertyValue(this object o, string name)
+        {
+            var property = o.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            if (property != null)
+            {
+                return property.GetValue(o, null);
+            }
+
+            return null;
+        }
+
+        public static void SetPropertyValue(this object o, string name, object value)
+        {
+            var property = o.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            if (property != null)
+            {
+                property.SetValue(o, value, null);
+            }
         }
     }
 }
