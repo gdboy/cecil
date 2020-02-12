@@ -104,6 +104,7 @@ namespace ILCore {
 
 		public object InvokeMethod(string methodName, params object[] objects)
 		{
+			Interpreter.stack.Push (this);
 			return Execute (type.FullName, methodName, Code.Callvirt, objects);
 		}
 
@@ -136,6 +137,13 @@ namespace ILCore {
 
 		public override string ToString ()
 		{
+			var methodDictionary = GetMethodDictionary (type.FullName);
+
+			if (methodDictionary.TryGetValue ("ToString()", out MethodDefinition methodDefinition)) {
+				Interpreter.stack.Push (this);
+				return Interpreter.Execute (methodDefinition, Code.Callvirt) as string;
+			}
+			
 			return type.FullName;
 		}
 	}
